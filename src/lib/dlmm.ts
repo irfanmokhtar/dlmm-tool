@@ -65,24 +65,19 @@ export async function fetchAllPairs(): Promise<PoolInfo[]> {
   }
 }
 
-// Token Map Cache to resolve symbols
-let tokenSymbolCache: Record<string, string> | null = null;
+// Pairs Cache to resolve symbols
+let pairsCache: PoolInfo[] | null = null;
 
-async function getTokenSymbol(mint: string): Promise<string> {
-  if (!tokenSymbolCache) {
+async function getPoolInfoCached(poolAddress: string): Promise<PoolInfo | undefined> {
+  if (!pairsCache) {
     try {
-      const res = await fetch("https://token.jup.ag/strict");
-      const tokens = await res.json();
-      tokenSymbolCache = {};
-      tokens.forEach((t: any) => {
-        if (tokenSymbolCache) tokenSymbolCache[t.address] = t.symbol;
-      });
+      pairsCache = await fetchAllPairs();
     } catch (e) {
-      console.error("Failed to fetch Jupiter token list:", e);
-      tokenSymbolCache = {}; // prevent repeated failed fetches
+      console.error("Failed to fetch pairs cache:", e);
+      pairsCache = []; // prevent repeated failed fetches
     }
   }
-  return tokenSymbolCache[mint] || mint.slice(0, 4);
+  return pairsCache.find((p) => p.address === poolAddress);
 }
 
 /**
@@ -116,8 +111,19 @@ export async function getUserPositions(
         const tokenX = dlmmPool.tokenX as any;
         const tokenY = dlmmPool.tokenY as any;
         
-        const symbolX = await getTokenSymbol(tokenX.publicKey.toBase58());
-        const symbolY = await getTokenSymbol(tokenY.publicKey.toBase58());
+        let symbolX = tokenX.symbol || tokenX.publicKey.toBase58().slice(0, 4);
+        let symbolY = tokenY.symbol || tokenY.publicKey.toBase58().slice(0, 4);
+        let poolName = `${symbolX}-${symbolY}`;
+
+        const poolInfo = await getPoolInfoCached(poolAddress);
+        if (poolInfo && poolInfo.name) {
+          poolName = poolInfo.name;
+          const parts = poolInfo.name.split("-");
+          if (parts.length === 2) {
+            symbolX = parts[0];
+            symbolY = parts[1];
+          }
+        }
 
         for (const position of positionInfo.lbPairPositionsData) {
           const posData = position.positionData;
