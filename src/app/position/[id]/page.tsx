@@ -12,6 +12,8 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import BinChart from "@/components/BinChart";
 import PositionHealth from "@/components/PositionHealth";
+import AutoCloseToggle from "@/components/AutoCloseToggle";
+import { useAutoCloseContext } from "@/components/AutoCloseMonitor";
 
 export default function PositionDetailPage() {
   const params = useParams();
@@ -23,6 +25,7 @@ export default function PositionDetailPage() {
   const [error, setError] = useState<string | null>(null);
 
   const positionId = params.id as string;
+  const autoClose = useAutoCloseContext();
 
   const fetchPosition = useCallback(async () => {
     if (!publicKey) return;
@@ -260,6 +263,21 @@ export default function PositionDetailPage() {
               Actions
             </h3>
             <div className="space-y-3">
+              {/* Auto-Close Toggle */}
+              <AutoCloseToggle
+                positionId={positionId}
+                poolAddress={position.poolAddress}
+                lowerBinId={position.positionData.lowerBinId}
+                upperBinId={position.positionData.upperBinId}
+                isEnabled={autoClose.isAutoCloseEnabled(positionId)}
+                status={autoClose.getStatus(positionId)}
+                error={autoClose.getError(positionId)}
+                onEnable={autoClose.enableAutoClose}
+                onDisable={autoClose.disableAutoClose}
+              />
+
+              <Separator className="bg-white/5" />
+
               <Button
                 className="w-full bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white shadow-lg shadow-emerald-500/10"
                 disabled={!hasFees}

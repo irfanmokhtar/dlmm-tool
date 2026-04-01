@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { UserPosition, calculatePositionHealth } from "@/lib/dlmm";
 import { TOKEN_COLORS } from "@/lib/constants";
 import PositionHealth from "./PositionHealth";
+import { useAutoCloseContext } from "./AutoCloseMonitor";
 
 interface PositionCardProps {
   position: UserPosition;
@@ -19,6 +20,8 @@ export default function PositionCard({ position }: PositionCardProps) {
 
   const colorX = TOKEN_COLORS[position.tokenX.symbol] || "#6366f1";
   const colorY = TOKEN_COLORS[position.tokenY.symbol] || "#06b6d4";
+  const autoClose = useAutoCloseContext();
+  const isAutoCloseOn = autoClose.isAutoCloseEnabled(position.publicKey.toBase58());
 
   return (
     <Link href={`/position/${position.publicKey.toBase58()}`}>
@@ -51,7 +54,18 @@ export default function PositionCard({ position }: PositionCardProps) {
                 </p>
               </div>
             </div>
-            <PositionHealth score={health.score} status={health.status} />
+            <div className="flex items-center gap-2">
+              {isAutoCloseOn && (
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20">
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-400" />
+                  </span>
+                  <span className="text-[9px] font-medium text-amber-400">AUTO</span>
+                </span>
+              )}
+              <PositionHealth score={health.score} status={health.status} />
+            </div>
           </div>
 
           {/* Active Price */}
