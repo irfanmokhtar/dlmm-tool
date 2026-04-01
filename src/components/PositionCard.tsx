@@ -1,17 +1,48 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { UserPosition, calculatePositionHealth } from "@/lib/dlmm";
 import { TOKEN_COLORS } from "@/lib/constants";
 import PositionHealth from "./PositionHealth";
 import { useAutoCloseContext } from "./AutoCloseMonitor";
+import { useWallet } from "@solana/wallet-adapter-react";
 
 interface PositionCardProps {
   position: UserPosition;
 }
 
 export default function PositionCard({ position }: PositionCardProps) {
+  const { publicKey } = useWallet();
+  const [pnlData, setPnlData] = useState<any>(null);
+  const [pnlLoading, setPnlLoading] = useState(false);
+
+  useEffect(() => {
+    if (!publicKey) return;
+
+    const fetchPnL = async () => {
+      setPnlLoading(true);
+      try {
+        const response = await fetch(
+          `/api/pnl?position=${position.publicKey.toBase58()}&user=${publicKey.toBase58()}&pool=${position.poolAddress}`
+        );
+        if (response.ok) {
+          const data = await response.json();
+          setPnlData(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch PnL for card:", err);
+      } finally {
+        setPnlLoading(false);
+      }
+    };
+
+    fetchPnL();
+    const interval = setInterval(fetchPnL, 60000);
+    return () => clearInterval(interval);
+  }, [publicKey, position.publicKey, position.poolAddress]);
+
   const health = calculatePositionHealth(
     position.activeBinId,
     position.positionData.lowerBinId,
@@ -68,6 +99,7 @@ export default function PositionCard({ position }: PositionCardProps) {
             </div>
           </div>
 
+
           {/* Active Price */}
           <div className="mb-4 px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.05]">
             <p className="text-[10px] text-muted-foreground mb-0.5">
@@ -106,6 +138,36 @@ export default function PositionCard({ position }: PositionCardProps) {
               </p>
             </div>
           </div>
+
+          {/* PnL Stats */}
+          <div className="mb-4 grid grid-cols-2 gap-3 p-2 rounded-lg bg-white/[0.02] border border-white/[0.05]">
+            <div className="space-y-0.5">
+              <p className="text-[10px] text-muted-foreground">Value / Status</p>
+              {pnlLoading && !pnlData ? (
+                <div className="h-4 w-16 bg-white/5 animate-pulse rounded" />
+              ) : (
+                <p className="text-sm font-mono font-bold text-foreground">
+                  ${pnlData?.totalCurrentValueUsd?.toFixed(2) || "0.00"}
+                </p>
+              )}
+            </div>
+            <div className="space-y-0.5 text-right">
+              <p className="text-[10px] text-muted-foreground">Net PnL</p>
+              {pnlLoading && !pnlData ? (
+                <div className="h-4 w-16 bg-white/5 animate-pulse rounded ml-auto" />
+              ) : (
+                <div className="flex flex-col items-end">
+                  <p className={`text-sm font-mono font-bold ${(pnlData?.netPnlUsd || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {(pnlData?.netPnlUsd || 0) >= 0 ? '+' : ''}${pnlData?.netPnlUsd?.toFixed(2) || "0.00"}
+                  </p>
+                  <p className={`text-[10px] font-mono ${(pnlData?.pnlPercentage || 0) >= 0 ? 'text-emerald-500/80' : 'text-rose-500/80'}`}>
+                    {(pnlData?.pnlPercentage || 0) >= 0 ? '+' : ''}{pnlData?.pnlPercentage?.toFixed(2) || "0.00"}%
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
 
           {/* Range */}
           <div className="mb-3">

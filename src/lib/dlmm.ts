@@ -130,15 +130,21 @@ export async function getUserPositions(
           const posData = position.positionData;
 
           // Calculate total amounts from bin data
-          let totalXAmount = BigInt(0);
-          let totalYAmount = BigInt(0);
+          let totalXAmount = 0;
+          let totalYAmount = 0;
           let feeX = BigInt(posData.feeX?.toString() || "0");
           let feeY = BigInt(posData.feeY?.toString() || "0");
 
+          const decimalsX = tokenX.mint?.decimals ?? 9;
+          const decimalsY = tokenY.mint?.decimals ?? 6;
+
           if (posData.positionBinData) {
-            for (const bin of posData.positionBinData) {
-              totalXAmount += BigInt(bin.binXAmount || "0");
-              totalYAmount += BigInt(bin.binYAmount || "0");
+            for (const bin of posData.positionBinData as any[]) {
+              // positionXAmount is the user's share in raw units (as string)
+              const x = bin.positionXAmount || "0";
+              const y = bin.positionYAmount || "0";
+              totalXAmount += parseFloat(x.toString());
+              totalYAmount += parseFloat(y.toString());
             }
           }
 
@@ -147,18 +153,14 @@ export async function getUserPositions(
             positionData: {
               lowerBinId: posData.lowerBinId,
               upperBinId: posData.upperBinId,
-              totalXAmount: (
-                Number(totalXAmount) / Math.pow(10, tokenX.decimal ?? 9)
-              ).toFixed((tokenX.decimal ?? 9) > 4 ? 4 : (tokenX.decimal ?? 9)),
-              totalYAmount: (
-                Number(totalYAmount) / Math.pow(10, tokenY.decimal ?? 6)
-              ).toFixed((tokenY.decimal ?? 6) > 4 ? 4 : (tokenY.decimal ?? 6)),
+              totalXAmount: (totalXAmount / Math.pow(10, decimalsX)).toFixed(decimalsX > 4 ? 4 : decimalsX),
+              totalYAmount: (totalYAmount / Math.pow(10, decimalsY)).toFixed(decimalsY > 4 ? 4 : decimalsY),
               feeX: (
-                Number(feeX) / Math.pow(10, tokenX.decimal ?? 9)
-              ).toFixed((tokenX.decimal ?? 9) > 4 ? 4 : (tokenX.decimal ?? 9)),
+                Number(feeX) / Math.pow(10, decimalsX)
+              ).toFixed(decimalsX > 4 ? 4 : decimalsX),
               feeY: (
-                Number(feeY) / Math.pow(10, tokenY.decimal ?? 6)
-              ).toFixed((tokenY.decimal ?? 6) > 4 ? 4 : (tokenY.decimal ?? 6)),
+                Number(feeY) / Math.pow(10, decimalsY)
+              ).toFixed(decimalsY > 4 ? 4 : decimalsY),
               rewardOne: "0",
               rewardTwo: "0",
               positionBinData: (posData.positionBinData || []).map(
@@ -166,14 +168,8 @@ export async function getUserPositions(
                   binId: Number(bin.binId),
                   price: bin.pricePerToken || "0",
                   pricePerToken: bin.pricePerToken || "0",
-                  amountX: (
-                    Number(bin.binXAmount || "0") /
-                    Math.pow(10, tokenX.decimal ?? 9)
-                  ).toString(),
-                  amountY: (
-                    Number(bin.binYAmount || "0") /
-                    Math.pow(10, tokenY.decimal ?? 6)
-                  ).toString(),
+                  amountX: (parseFloat(bin.positionXAmount || "0") / Math.pow(10, decimalsX)).toString(),
+                  amountY: (parseFloat(bin.positionYAmount || "0") / Math.pow(10, decimalsY)).toString(),
                   amountXInActive: "0",
                   amountYInActive: "0",
                 })
@@ -183,15 +179,15 @@ export async function getUserPositions(
             poolName: `${symbolX}-${symbolY}`,
             activeBinId: activeBin.binId,
             activeBinPrice: activeBin.price,
-            tokenX: {
-              symbol: symbolX,
-              mint: tokenX.publicKey.toBase58(),
-              decimals: tokenX.decimal ?? 9,
+            tokenX: { 
+              symbol: symbolX, 
+              mint: mintX, 
+              decimals: decimalsX 
             },
-            tokenY: {
-              symbol: symbolY,
-              mint: tokenY.publicKey.toBase58(),
-              decimals: tokenY.decimal ?? 6,
+            tokenY: { 
+              symbol: symbolY, 
+              mint: mintY, 
+              decimals: decimalsY 
             },
           });
         }

@@ -21,6 +21,7 @@ interface AutoCloseEntry {
   poolAddress: string;
   upperBinId: number;
   lowerBinId: number;
+  targetPnl?: number;
 }
 
 interface AutoCloseState {
@@ -81,10 +82,10 @@ export function useAutoClose() {
   }, []);
 
   const enableAutoClose = useCallback(
-    (positionId: string, poolAddress: string, lowerBinId: number, upperBinId: number) => {
+    (positionId: string, poolAddress: string, lowerBinId: number, upperBinId: number, targetPnl?: number) => {
       setState((prev) => {
         if (prev.entries.some((e) => e.positionId === positionId)) return prev;
-        const newEntry: AutoCloseEntry = { positionId, poolAddress, upperBinId, lowerBinId };
+        const newEntry: AutoCloseEntry = { positionId, poolAddress, upperBinId, lowerBinId, targetPnl };
         const newEntries = [...prev.entries, newEntry];
         saveEntries(newEntries);
         return {
@@ -140,11 +141,38 @@ export function useAutoClose() {
         if (processingRef.current.has(entry.positionId)) continue;
 
         try {
-          const { binId } = await getActiveBinForPool(connection, entry.poolAddress);
+          let triggerClose = false;
+          let closeReason = "";
 
+          // 1. Check Out-of-Range Condition
+          const { binId } = await getActiveBinForPool(connection, entry.poolAddress);
           if (binId > entry.upperBinId) {
-            // Active bin is above range — trigger auto-close via API
+            triggerClose = true;
+            closeReason = "Out of range";
+          }
+
+          // 2. Check Target PnL Condition if enabled
+          if (!triggerClose && entry.targetPnl !== undefined) {
+             try {
+                const pnlUrl = `/api/pnl?position=${entry.positionId}&user=${publicKey.toBase58()}&pool=${entry.poolAddress}`;
+                const pnlRes = await fetch(pnlUrl);
+                const pnlData = await pnlRes.json();
+                
+                if (pnlRes.ok && pnlData.pnlPercentage !== undefined) {
+                   if (pnlData.pnlPercentage >= entry.targetPnl) {
+                      triggerClose = true;
+                      closeReason = `PnL reached ${pnlData.pnlPercentage.toFixed(2)}%`;
+                   }
+                }
+             } catch (err) {
+                console.warn("Failed to check PnL for", entry.positionId, err);
+             }
+          }
+
+          if (triggerClose) {
+            // Trigger auto-close via API
             processingRef.current.add(entry.positionId);
+            console.log(`[Auto-Close] Triggering close for ${entry.positionId}. Reason: ${closeReason}`);
 
             setState((prev) => ({
               ...prev,
