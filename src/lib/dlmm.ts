@@ -7,6 +7,7 @@ import { DLMM_API_BASE } from "./constants";
 const dlmmCache = new Map<string, Promise<DLMM>>();
 const CACHE_TTL = 30_000; // 30 seconds
 const cacheTimestamps = new Map<string, number>();
+const tokenMetadataCache = new Map<string, { symbol: string, logoURI: string }>();
 
 async function getOrCreateDlmmPool(connection: Connection, poolAddress: string): Promise<DLMM> {
   const now = Date.now();
@@ -64,8 +65,8 @@ export interface UserPosition {
   poolName: string;
   activeBinId: number;
   activeBinPrice: string;
-  tokenX: { symbol: string; mint: string; decimals: number };
-  tokenY: { symbol: string; mint: string; decimals: number };
+  tokenX: { symbol: string; mint: string; decimals: number; logoURI?: string };
+  tokenY: { symbol: string; mint: string; decimals: number; logoURI?: string };
 }
 
 // ---------- API Functions ----------
@@ -76,6 +77,7 @@ export interface UserPosition {
 const symbolCache: Record<string, string> = {};
 
 async function getTokenSymbolByMint(connection: Connection, mintAddress: string): Promise<string | undefined> {
+  if (tokenMetadataCache.has(mintAddress)) return tokenMetadataCache.get(mintAddress)?.symbol;
   if (symbolCache[mintAddress]) return symbolCache[mintAddress];
   
   try {
@@ -102,6 +104,39 @@ async function getTokenSymbolByMint(connection: Connection, mintAddress: string)
     console.warn("Failed to fetch token symbol via DAS API:", err);
   }
   return undefined;
+}
+
+/**
+ * Resolve token metadata (symbols and logos) from Jupiter
+ */
+async function resolveTokenMetadata(mints: string[]): Promise<void> {
+    const missing = mints.filter(m => !tokenMetadataCache.has(m));
+    if (missing.length === 0) return;
+
+    try {
+        // Call our local proxy instead of Jupiter directly
+        const url = `/api/token-metadata?mints=${missing.join(',')}`;
+        const res = await fetch(url);
+        
+        if (res.ok) {
+            const tokens = await res.json();
+            if (Array.isArray(tokens)) {
+                tokens.forEach(t => {
+                   const mint = t.id || t.address;
+                   if (mint) {
+                       tokenMetadataCache.set(mint, {
+                           symbol: t.symbol,
+                           logoURI: t.icon || t.logoURI
+                       });
+                   }
+                });
+            }
+        } else {
+            console.warn("[TokenMetadata] Proxy fetch failed:", res.status);
+        }
+    } catch (err) {
+        console.warn("[TokenMetadata] Metadata resolution failed:", err);
+    }
 }
 
 /**
@@ -144,8 +179,14 @@ export async function getUserPositions(
         const mintX = tokenX.publicKey.toBase58();
         const mintY = tokenY.publicKey.toBase58();
         
-        const symbolXJup = await getTokenSymbolByMint(connection, mintX);
-        const symbolYJup = await getTokenSymbolByMint(connection, mintY);
+        // Batch resolve metadata for this pool's tokens
+        await resolveTokenMetadata([mintX, mintY]);
+        
+        const metadataX = tokenMetadataCache.get(mintX);
+        const metadataY = tokenMetadataCache.get(mintY);
+
+        const symbolXJup = metadataX?.symbol || await getTokenSymbolByMint(connection, mintX);
+        const symbolYJup = metadataY?.symbol || await getTokenSymbolByMint(connection, mintY);
         
         let symbolX = symbolXJup || tokenX.symbol || mintX.slice(0, 4);
         let symbolY = symbolYJup || tokenY.symbol || mintY.slice(0, 4);
@@ -207,12 +248,14 @@ export async function getUserPositions(
             tokenX: { 
               symbol: symbolX, 
               mint: mintX, 
-              decimals: decimalsX 
+              decimals: decimalsX,
+              logoURI: metadataX?.logoURI
             },
             tokenY: { 
               symbol: symbolY, 
               mint: mintY, 
-              decimals: decimalsY 
+              decimals: decimalsY,
+              logoURI: metadataY?.logoURI
             },
           });
         }

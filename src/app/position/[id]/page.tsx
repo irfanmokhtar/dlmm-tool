@@ -16,6 +16,7 @@ import AutoCloseToggle from "@/components/AutoCloseToggle";
 import AutoCloseLogs from "@/components/AutoCloseLogs";
 import { useAutoCloseContext } from "@/components/AutoCloseMonitor";
 import { usePositionData } from "@/components/PositionProvider";
+import TokenLogo from "@/components/TokenLogo";
 
 export default function PositionDetailPage() {
   const params = useParams();
@@ -90,11 +91,12 @@ export default function PositionDetailPage() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-teal-400 to-cyan-500 flex items-center justify-center shadow-lg shadow-teal-500/20">
-            <span className="text-xl font-bold text-white">
-              {position.tokenX.symbol.slice(0, 1)}
-            </span>
-          </div>
+          <TokenLogo
+            src={position.tokenX.logoURI}
+            symbol={position.tokenX.symbol}
+            className="w-12 h-12 text-lg font-bold shadow-teal-500/20"
+            backgroundColor="#14b8a6"
+          />
           <div>
             <h1 className="text-2xl font-bold text-foreground">
               {position.poolName}

@@ -7,6 +7,7 @@ import { UserPosition, calculatePositionHealth } from "@/lib/dlmm";
 import { TOKEN_COLORS } from "@/lib/constants";
 import PositionHealth from "./PositionHealth";
 import { useAutoCloseContext } from "./AutoCloseMonitor";
+import TokenLogo from "./TokenLogo";
 
 interface PositionCardProps {
   position: UserPosition;
@@ -32,18 +33,18 @@ export default function PositionCard({ position }: PositionCardProps) {
           <div className="flex items-start justify-between gap-2 mb-3">
             <div className="flex items-center gap-3 min-w-0">
               <div className="flex -space-x-2 shrink-0">
-                <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-md z-10 ring-2 ring-black/30"
-                  style={{ backgroundColor: colorX }}
-                >
-                  {position.tokenX.symbol.slice(0, 2)}
-                </div>
-                <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-md ring-2 ring-black/30"
-                  style={{ backgroundColor: colorY }}
-                >
-                  {position.tokenY.symbol.slice(0, 2)}
-                </div>
+                <TokenLogo
+                  src={position.tokenX.logoURI}
+                  symbol={position.tokenX.symbol}
+                  className="w-8 h-8 z-10"
+                  backgroundColor={colorX}
+                />
+                <TokenLogo
+                  src={position.tokenY.logoURI}
+                  symbol={position.tokenY.symbol}
+                  className="w-8 h-8"
+                  backgroundColor={colorY}
+                />
               </div>
               <div className="min-w-0">
                 <h3 className="font-bold text-base text-foreground leading-tight truncate">
