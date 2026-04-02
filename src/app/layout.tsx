@@ -15,6 +15,7 @@ const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
 });
 
+import PositionProvider from "@/components/PositionProvider";
 import AutoCloseMonitor from "@/components/AutoCloseMonitor";
 
 export const metadata: Metadata = {
@@ -35,12 +36,14 @@ export default function RootLayout({
     >
       <body className="min-h-full flex bg-[#0a0b0f] text-foreground">
         <WalletProvider>
-          <AutoCloseMonitor>
-            <TooltipProvider>
-              <Sidebar />
-              <main className="flex-1 overflow-y-auto">{children}</main>
-            </TooltipProvider>
-          </AutoCloseMonitor>
+          <PositionProvider>
+            <AutoCloseMonitor>
+              <TooltipProvider>
+                <Sidebar />
+                <main className="flex-1 overflow-y-auto">{children}</main>
+              </TooltipProvider>
+            </AutoCloseMonitor>
+          </PositionProvider>
         </WalletProvider>
       </body>
     </html>

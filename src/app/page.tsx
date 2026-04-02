@@ -6,6 +6,7 @@ import StatsBar from "@/components/StatsBar";
 import PositionCard from "@/components/PositionCard";
 import SkeletonCard from "@/components/SkeletonCard";
 import WalletButton from "@/components/WalletButton";
+import RefreshSettings from "@/components/RefreshSettings";
 
 export default function DashboardPage() {
   const { publicKey } = useWallet();
@@ -72,18 +73,13 @@ export default function DashboardPage() {
             Your Meteora DLMM positions overview
           </p>
         </div>
-        {/* Mobile wallet button */}
-        <div className="md:hidden">
-          <WalletButton />
+        <div className="flex items-center gap-3">
+          {/* Mobile wallet button */}
+          <div className="md:hidden">
+            <WalletButton />
+          </div>
+          <RefreshSettings />
         </div>
-        <button
-          onClick={refetch}
-          disabled={loading}
-          className="hidden md:flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-lg border border-white/10 hover:border-white/20"
-        >
-          <span className={loading ? "animate-spin" : ""}>↻</span>
-          Refresh
-        </button>
       </div>
 
       {/* Stats Bar */}

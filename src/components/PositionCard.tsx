@@ -1,48 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { UserPosition, calculatePositionHealth } from "@/lib/dlmm";
 import { TOKEN_COLORS } from "@/lib/constants";
 import PositionHealth from "./PositionHealth";
 import { useAutoCloseContext } from "./AutoCloseMonitor";
-import { useWallet } from "@solana/wallet-adapter-react";
 
 interface PositionCardProps {
   position: UserPosition;
 }
 
 export default function PositionCard({ position }: PositionCardProps) {
-  const { publicKey } = useWallet();
-  const [pnlData, setPnlData] = useState<any>(null);
-  const [pnlLoading, setPnlLoading] = useState(false);
-
-  useEffect(() => {
-    if (!publicKey) return;
-
-    const fetchPnL = async () => {
-      setPnlLoading(true);
-      try {
-        const response = await fetch(
-          `/api/pnl?position=${position.publicKey.toBase58()}&user=${publicKey.toBase58()}&pool=${position.poolAddress}`
-        );
-        if (response.ok) {
-          const data = await response.json();
-          setPnlData(data);
-        }
-      } catch (err) {
-        console.error("Failed to fetch PnL for card:", err);
-      } finally {
-        setPnlLoading(false);
-      }
-    };
-
-    fetchPnL();
-    const interval = setInterval(fetchPnL, 60000);
-    return () => clearInterval(interval);
-  }, [publicKey, position.publicKey, position.poolAddress]);
-
   const health = calculatePositionHealth(
     position.activeBinId,
     position.positionData.lowerBinId,
@@ -58,45 +28,46 @@ export default function PositionCard({ position }: PositionCardProps) {
     <Link href={`/position/${position.publicKey.toBase58()}`}>
       <Card className="bg-white/[0.03] border-white/[0.06] backdrop-blur-sm hover:bg-white/[0.06] hover:border-white/[0.12] transition-all duration-300 cursor-pointer group shadow-lg hover:shadow-xl overflow-hidden relative">
         <CardContent className="p-5">
-          {/* Header: Token pair + Health */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              {/* Token pair icons */}
-              <div className="flex -space-x-2">
+          {/* Header: Token pair name and Icons */}
+          <div className="flex items-start justify-between gap-2 mb-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="flex -space-x-2 shrink-0">
                 <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-md z-10 ring-2 ring-black/30"
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-md z-10 ring-2 ring-black/30"
                   style={{ backgroundColor: colorX }}
                 >
                   {position.tokenX.symbol.slice(0, 2)}
                 </div>
                 <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-md ring-2 ring-black/30"
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-md ring-2 ring-black/30"
                   style={{ backgroundColor: colorY }}
                 >
                   {position.tokenY.symbol.slice(0, 2)}
                 </div>
               </div>
-              <div>
-                <h3 className="font-semibold text-sm text-foreground group-hover:text-teal-400 transition-colors">
+              <div className="min-w-0">
+                <h3 className="font-bold text-base text-foreground leading-tight truncate">
                   {position.poolName}
                 </h3>
-                <p className="text-[10px] text-muted-foreground font-mono">
-                  {position.publicKey.toBase58().slice(0, 8)}...
+                <p className="text-[10px] text-muted-foreground font-mono truncate opacity-60">
+                  {position.publicKey.toBase58().slice(0, 12)}...
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              {isAutoCloseOn && (
-                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20">
-                  <span className="relative flex h-1.5 w-1.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-400" />
-                  </span>
-                  <span className="text-[9px] font-medium text-amber-400">AUTO</span>
+          </div>
+
+          {/* Status Row: AutoClose + Health */}
+          <div className="flex items-center gap-2 mb-4">
+            {isAutoCloseOn && (
+              <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20 text-[9px] px-1.5 py-0 h-5 font-bold uppercase tracking-wider gap-1 hover:bg-amber-500/20">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-400" />
                 </span>
-              )}
-              <PositionHealth score={health.score} status={health.status} />
-            </div>
+                Auto
+              </Badge>
+            )}
+            <PositionHealth score={health.score} status={health.status} />
           </div>
 
 
@@ -138,36 +109,6 @@ export default function PositionCard({ position }: PositionCardProps) {
               </p>
             </div>
           </div>
-
-          {/* PnL Stats */}
-          <div className="mb-4 grid grid-cols-2 gap-3 p-2 rounded-lg bg-white/[0.02] border border-white/[0.05]">
-            <div className="space-y-0.5">
-              <p className="text-[10px] text-muted-foreground">Value / Status</p>
-              {pnlLoading && !pnlData ? (
-                <div className="h-4 w-16 bg-white/5 animate-pulse rounded" />
-              ) : (
-                <p className="text-sm font-mono font-bold text-foreground">
-                  ${pnlData?.totalCurrentValueUsd?.toFixed(2) || "0.00"}
-                </p>
-              )}
-            </div>
-            <div className="space-y-0.5 text-right">
-              <p className="text-[10px] text-muted-foreground">Net PnL</p>
-              {pnlLoading && !pnlData ? (
-                <div className="h-4 w-16 bg-white/5 animate-pulse rounded ml-auto" />
-              ) : (
-                <div className="flex flex-col items-end">
-                  <p className={`text-sm font-mono font-bold ${(pnlData?.netPnlUsd || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {(pnlData?.netPnlUsd || 0) >= 0 ? '+' : ''}${pnlData?.netPnlUsd?.toFixed(2) || "0.00"}
-                  </p>
-                  <p className={`text-[10px] font-mono ${(pnlData?.pnlPercentage || 0) >= 0 ? 'text-emerald-500/80' : 'text-rose-500/80'}`}>
-                    {(pnlData?.pnlPercentage || 0) >= 0 ? '+' : ''}{pnlData?.pnlPercentage?.toFixed(2) || "0.00"}%
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-
 
           {/* Range */}
           <div className="mb-3">

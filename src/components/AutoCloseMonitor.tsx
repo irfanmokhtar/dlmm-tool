@@ -11,6 +11,7 @@ interface AutoCloseContextValue {
   getError: (positionId: string) => string | undefined;
   pollInterval: number;
   updatePollInterval: (ms: number) => void;
+  getLogs: (positionId: string) => any[];
 }
 
 const AutoCloseContext = createContext<AutoCloseContextValue | null>(null);
@@ -40,6 +41,7 @@ export default function AutoCloseMonitor({ children }: { children: React.ReactNo
         getError: autoClose.getError,
         pollInterval: autoClose.pollInterval,
         updatePollInterval: autoClose.updatePollInterval,
+        getLogs: autoClose.getLogs,
       }}
     >
       {children}

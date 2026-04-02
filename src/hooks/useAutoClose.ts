@@ -16,6 +16,13 @@ export type AutoCloseStatus =
   | "closed"
   | "error";
 
+export interface AutoCloseLogEntry {
+  timestamp: number;
+  type: "range" | "pnl" | "system";
+  status: "passed" | "triggered" | "error" | "info";
+  message: string;
+}
+
 interface AutoCloseEntry {
   positionId: string;
   poolAddress: string;
@@ -28,6 +35,7 @@ interface AutoCloseState {
   entries: AutoCloseEntry[];
   statuses: Record<string, AutoCloseStatus>;
   errors: Record<string, string>;
+  logs: Record<string, AutoCloseLogEntry[]>;
 }
 
 function loadEntries(): AutoCloseEntry[] {
@@ -52,9 +60,23 @@ export function useAutoClose() {
     entries: [],
     statuses: {},
     errors: {},
+    logs: {},
   });
   const [pollInterval, setPollInterval] = useState(DEFAULT_POLL_INTERVAL);
   const processingRef = useRef<Set<string>>(new Set());
+
+  const addLog = useCallback((positionId: string, entry: Omit<AutoCloseLogEntry, "timestamp">) => {
+    setState((prev) => {
+      const positionLogs = prev.logs[positionId] || [];
+      const newEntry: AutoCloseLogEntry = { ...entry, timestamp: Date.now() };
+      // Keep last 20 logs
+      const updatedLogs = [newEntry, ...positionLogs].slice(0, 20);
+      return {
+        ...prev,
+        logs: { ...prev.logs, [positionId]: updatedLogs },
+      };
+    });
+  }, []);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -64,7 +86,7 @@ export function useAutoClose() {
     for (const e of entries) {
       statuses[e.positionId] = "monitoring";
     }
-    setState({ entries, statuses, errors: {} });
+    setState({ entries, statuses, errors: {}, logs: {} });
 
     // Load settings
     try {
@@ -106,7 +128,7 @@ export function useAutoClose() {
       delete newStatuses[positionId];
       const newErrors = { ...prev.errors };
       delete newErrors[positionId];
-      return { entries: newEntries, statuses: newStatuses, errors: newErrors };
+      return { entries: newEntries, statuses: newStatuses, errors: newErrors, logs: prev.logs };
     });
   }, []);
 
@@ -131,6 +153,13 @@ export function useAutoClose() {
     [state.errors]
   );
 
+  const getLogs = useCallback(
+    (positionId: string): AutoCloseLogEntry[] => {
+      return state.logs[positionId] || [];
+    },
+    [state.logs]
+  );
+
   // Polling loop
   useEffect(() => {
     if (!publicKey || state.entries.length === 0) return;
@@ -149,6 +178,17 @@ export function useAutoClose() {
           if (binId > entry.upperBinId) {
             triggerClose = true;
             closeReason = "Out of range";
+            addLog(entry.positionId, {
+              type: "range",
+              status: "triggered",
+              message: `Active Bin ${binId} > Upper Bin ${entry.upperBinId}`,
+            });
+          } else {
+            addLog(entry.positionId, {
+              type: "range",
+              status: "passed",
+              message: `Bin ${binId} is within range (<= ${entry.upperBinId})`,
+            });
           }
 
           // 2. Check Target PnL Condition if enabled
@@ -159,9 +199,21 @@ export function useAutoClose() {
                 const pnlData = await pnlRes.json();
                 
                 if (pnlRes.ok && pnlData.pnlPercentage !== undefined) {
-                   if (pnlData.pnlPercentage >= entry.targetPnl) {
+                   const curr = pnlData.pnlPercentage;
+                   if (curr >= entry.targetPnl) {
                       triggerClose = true;
-                      closeReason = `PnL reached ${pnlData.pnlPercentage.toFixed(2)}%`;
+                      closeReason = `PnL reached ${curr.toFixed(2)}%`;
+                      addLog(entry.positionId, {
+                        type: "pnl",
+                        status: "triggered",
+                        message: `PnL ${curr.toFixed(2)}% >= Target ${entry.targetPnl}%`,
+                      });
+                   } else {
+                      addLog(entry.positionId, {
+                        type: "pnl",
+                        status: "passed",
+                        message: `PnL ${curr.toFixed(2)}% is below target ${entry.targetPnl}%`,
+                      });
                    }
                 }
              } catch (err) {
@@ -205,6 +257,12 @@ export function useAutoClose() {
 
               console.log(`[Auto-Close] Position ${entry.positionId} closed. Signatures:`, result.signatures);
 
+              addLog(entry.positionId, {
+                type: "system",
+                status: "info",
+                message: "Position closed successfully",
+              });
+
               setState((prev) => ({
                 ...prev,
                 statuses: { ...prev.statuses, [entry.positionId]: "closed" },
@@ -246,6 +304,7 @@ export function useAutoClose() {
     isAutoCloseEnabled,
     getStatus,
     getError,
+    getLogs,
     entries: state.entries,
     pollInterval,
     updatePollInterval,

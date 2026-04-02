@@ -3,7 +3,26 @@ import DLMM from "@meteora-ag/dlmm";
 import BN from "bn.js";
 import { DLMM_API_BASE } from "./constants";
 
-// ---------- Types ----------
+// ---------- Cache ----------
+const dlmmCache = new Map<string, Promise<DLMM>>();
+const CACHE_TTL = 30_000; // 30 seconds
+const cacheTimestamps = new Map<string, number>();
+
+async function getOrCreateDlmmPool(connection: Connection, poolAddress: string): Promise<DLMM> {
+  const now = Date.now();
+  const cached = dlmmCache.get(poolAddress);
+  const timestamp = cacheTimestamps.get(poolAddress) || 0;
+
+  if (cached && (now - timestamp < CACHE_TTL)) {
+    return cached;
+  }
+
+  const promise = DLMM.create(connection, new PublicKey(poolAddress));
+  dlmmCache.set(poolAddress, promise);
+  cacheTimestamps.set(poolAddress, now);
+  
+  return promise;
+}
 export interface PoolInfo {
   address: string;
   name: string;
@@ -101,16 +120,22 @@ export async function getUserPositions(
 
     const userPositions: UserPosition[] = [];
 
+    const activeBinCache = new Map<string, any>();
+
     for (const [poolAddress, positionInfo] of positions) {
       try {
-        // Create DLMM instance for this pool
-        const dlmmPool = await DLMM.create(
+        // Use cached DLMM instance for this pool
+        const dlmmPool = await getOrCreateDlmmPool(
           connection,
-          new PublicKey(poolAddress)
+          poolAddress
         );
 
-        // Get active bin
-        const activeBin = await dlmmPool.getActiveBin();
+        // Get active bin (cache it for this cycle if multiple positions in same pool)
+        let activeBin = activeBinCache.get(poolAddress);
+        if (!activeBin) {
+          activeBin = await dlmmPool.getActiveBin();
+          activeBinCache.set(poolAddress, activeBin);
+        }
 
         // Get token info and resolve symbols
         const tokenX = dlmmPool.tokenX as any;
@@ -237,7 +262,7 @@ export async function getActiveBinForPool(
   connection: Connection,
   poolAddress: string
 ): Promise<{ binId: number; price: string }> {
-  const dlmmPool = await DLMM.create(connection, new PublicKey(poolAddress));
+  const dlmmPool = await getOrCreateDlmmPool(connection, poolAddress);
   const activeBin = await dlmmPool.getActiveBin();
   return { binId: activeBin.binId, price: activeBin.price };
 }
@@ -254,7 +279,7 @@ export async function closePosition(
   lowerBinId: number,
   upperBinId: number
 ): Promise<Transaction[]> {
-  const dlmmPool = await DLMM.create(connection, new PublicKey(poolAddress));
+  const dlmmPool = await getOrCreateDlmmPool(connection, poolAddress);
 
   const transactions = await dlmmPool.removeLiquidity({
     user: userPubKey,

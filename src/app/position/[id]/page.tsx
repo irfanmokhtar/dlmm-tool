@@ -1,10 +1,10 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
-import { getUserPositions, calculatePositionHealth, UserPosition } from "@/lib/dlmm";
+import { calculatePositionHealth, UserPosition } from "@/lib/dlmm";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,45 +13,26 @@ import { Skeleton } from "@/components/ui/skeleton";
 import BinChart from "@/components/BinChart";
 import PositionHealth from "@/components/PositionHealth";
 import AutoCloseToggle from "@/components/AutoCloseToggle";
+import AutoCloseLogs from "@/components/AutoCloseLogs";
 import { useAutoCloseContext } from "@/components/AutoCloseMonitor";
+import { usePositionData } from "@/components/PositionProvider";
 
 export default function PositionDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { connection } = useConnection();
   const { publicKey } = useWallet();
-  const [position, setPosition] = useState<UserPosition | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { positions, loading, error: dataError } = usePositionData();
 
   const positionId = params.id as string;
   const autoClose = useAutoCloseContext();
 
-  const fetchPosition = useCallback(async () => {
-    if (!publicKey) return;
+  const position = useMemo(
+    () => positions.find((p) => p.publicKey.toBase58() === positionId),
+    [positions, positionId]
+  );
 
-    setLoading(true);
-    try {
-      const allPositions = await getUserPositions(connection, publicKey);
-      const found = allPositions.find(
-        (p) => p.publicKey.toBase58() === positionId
-      );
-      if (found) {
-        setPosition(found);
-      } else {
-        setError("Position not found");
-      }
-    } catch (err) {
-      console.error(err);
-      setError("Failed to load position data");
-    } finally {
-      setLoading(false);
-    }
-  }, [connection, publicKey, positionId]);
-
-  useEffect(() => {
-    fetchPosition();
-  }, [fetchPosition]);
+  const error = dataError || (!loading && !position ? "Position not found" : null);
 
   if (!publicKey) {
     return (
@@ -61,7 +42,7 @@ export default function PositionDetailPage() {
     );
   }
 
-  if (loading) {
+  if (loading && !position) {
     return (
       <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
         <Skeleton className="w-32 h-4" />
@@ -298,6 +279,9 @@ export default function PositionDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Monitoring Logs */}
+      <AutoCloseLogs positionId={positionId} />
     </div>
   );
 }
