@@ -11,7 +11,7 @@ interface AutoCloseToggleProps {
   isEnabled: boolean;
   status: import("@/hooks/useAutoClose").AutoCloseStatus;
   error?: string;
-  onEnable: (positionId: string, poolAddress: string, lowerBinId: number, upperBinId: number, targetPnl?: number) => void;
+  onEnable: (positionId: string, poolAddress: string, lowerBinId: number, upperBinId: number) => void;
   onDisable: (positionId: string) => void;
 }
 
@@ -37,14 +37,12 @@ export default function AutoCloseToggle({
 }: AutoCloseToggleProps) {
   const statusConfig = STATUS_CONFIG[status];
   const { pollInterval, updatePollInterval } = useAutoCloseContext();
-  const [targetPnlStr, setTargetPnlStr] = useState<string>("");
 
   const handleToggle = () => {
     if (isEnabled) {
       onDisable(positionId);
     } else {
-      const pnlNum = parseFloat(targetPnlStr);
-      onEnable(positionId, poolAddress, lowerBinId, upperBinId, isNaN(pnlNum) ? undefined : pnlNum);
+      onEnable(positionId, poolAddress, lowerBinId, upperBinId);
     }
   };
 
@@ -108,19 +106,6 @@ export default function AutoCloseToggle({
         </div>
       )}
 
-      {/* Target PnL Input (Only show when not enabled, or conditionally) */}
-      {!isEnabled && (
-        <div className="flex items-center gap-2 mt-2">
-          <label className="text-xs text-muted-foreground whitespace-nowrap">Auto-Close at PnL %:</label>
-          <input
-            type="number"
-            placeholder="e.g. 10"
-            value={targetPnlStr}
-            onChange={(e) => setTargetPnlStr(e.target.value)}
-            className="w-full h-8 px-2 bg-white/5 border border-white/10 rounded-md text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-teal-500"
-          />
-        </div>
-      )}
 
       {error && (
         <p className="text-[10px] text-rose-400 px-1">{error}</p>

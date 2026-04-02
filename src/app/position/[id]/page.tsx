@@ -17,7 +17,7 @@ import AutoCloseLogs from "@/components/AutoCloseLogs";
 import { useAutoCloseContext } from "@/components/AutoCloseMonitor";
 import { usePositionData } from "@/components/PositionProvider";
 import TokenLogo from "@/components/TokenLogo";
-import PnLStats from "@/components/PnLStats";
+import { formatCompactDecimal } from "@/lib/format";
 
 
 export default function PositionDetailPage() {
@@ -111,12 +111,6 @@ export default function PositionDetailPage() {
         <PositionHealth score={health.score} status={health.status} />
       </div>
 
-      {/* PnL Stats */}
-      <PnLStats 
-        positionAddress={positionId} 
-        userWallet={publicKey?.toBase58() || ""} 
-        poolAddress={position.poolAddress}
-      />
 
       {/* Info Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -125,7 +119,7 @@ export default function PositionDetailPage() {
           <CardContent className="p-5">
             <p className="text-xs text-muted-foreground mb-1">Active Price</p>
             <p className="text-2xl font-mono font-bold bg-gradient-to-r from-teal-400 to-cyan-300 bg-clip-text text-transparent">
-              {parseFloat(position.activeBinPrice).toFixed(6)}
+              {formatCompactDecimal(position.activeBinPrice)}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
               {position.tokenY.symbol} per {position.tokenX.symbol}
@@ -145,10 +139,7 @@ export default function PositionDetailPage() {
                 {position.tokenX.symbol}
               </Badge>
               <span className="font-mono font-semibold text-sm">
-                {parseFloat(position.positionData.totalXAmount).toLocaleString(
-                  undefined,
-                  { maximumFractionDigits: 4 }
-                )}
+                {formatCompactDecimal(position.positionData.totalXAmount)}
               </span>
             </div>
             <div className="flex justify-between items-center">
@@ -159,10 +150,7 @@ export default function PositionDetailPage() {
                 {position.tokenY.symbol}
               </Badge>
               <span className="font-mono font-semibold text-sm">
-                {parseFloat(position.positionData.totalYAmount).toLocaleString(
-                  undefined,
-                  { maximumFractionDigits: 2 }
-                )}
+                {formatCompactDecimal(position.positionData.totalYAmount)}
               </span>
             </div>
           </CardContent>
@@ -225,7 +213,7 @@ export default function PositionDetailPage() {
                       {position.tokenX.symbol} Fees
                     </span>
                     <span className="font-mono text-sm font-semibold text-emerald-400">
-                      {parseFloat(position.positionData.feeX).toFixed(6)}
+                      {formatCompactDecimal(position.positionData.feeX)}
                     </span>
                   </div>
                 )}
@@ -235,7 +223,7 @@ export default function PositionDetailPage() {
                       {position.tokenY.symbol} Fees
                     </span>
                     <span className="font-mono text-sm font-semibold text-emerald-400">
-                      {parseFloat(position.positionData.feeY).toFixed(6)}
+                      {formatCompactDecimal(position.positionData.feeY)}
                     </span>
                   </div>
                 )}

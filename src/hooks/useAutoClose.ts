@@ -18,7 +18,7 @@ export type AutoCloseStatus =
 
 export interface AutoCloseLogEntry {
   timestamp: number;
-  type: "range" | "pnl" | "system";
+  type: "range" | "system";
   status: "passed" | "triggered" | "error" | "info";
   message: string;
 }
@@ -28,7 +28,6 @@ interface AutoCloseEntry {
   poolAddress: string;
   upperBinId: number;
   lowerBinId: number;
-  targetPnl?: number;
 }
 
 interface AutoCloseState {
@@ -104,10 +103,10 @@ export function useAutoClose() {
   }, []);
 
   const enableAutoClose = useCallback(
-    (positionId: string, poolAddress: string, lowerBinId: number, upperBinId: number, targetPnl?: number) => {
+    (positionId: string, poolAddress: string, lowerBinId: number, upperBinId: number) => {
       setState((prev) => {
         if (prev.entries.some((e) => e.positionId === positionId)) return prev;
-        const newEntry: AutoCloseEntry = { positionId, poolAddress, upperBinId, lowerBinId, targetPnl };
+        const newEntry: AutoCloseEntry = { positionId, poolAddress, upperBinId, lowerBinId };
         const newEntries = [...prev.entries, newEntry];
         saveEntries(newEntries);
         return {
@@ -191,35 +190,6 @@ export function useAutoClose() {
             });
           }
 
-          // 2. Check Target PnL Condition if enabled
-          if (!triggerClose && entry.targetPnl !== undefined) {
-             try {
-                const pnlUrl = `/api/pnl?position=${entry.positionId}&user=${publicKey.toBase58()}&pool=${entry.poolAddress}`;
-                const pnlRes = await fetch(pnlUrl);
-                const pnlData = await pnlRes.json();
-                
-                if (pnlRes.ok && pnlData.pnlPercentage !== undefined) {
-                   const curr = pnlData.pnlPercentage;
-                   if (curr >= entry.targetPnl) {
-                      triggerClose = true;
-                      closeReason = `PnL reached ${curr.toFixed(2)}%`;
-                      addLog(entry.positionId, {
-                        type: "pnl",
-                        status: "triggered",
-                        message: `PnL ${curr.toFixed(2)}% >= Target ${entry.targetPnl}%`,
-                      });
-                   } else {
-                      addLog(entry.positionId, {
-                        type: "pnl",
-                        status: "passed",
-                        message: `PnL ${curr.toFixed(2)}% is below target ${entry.targetPnl}%`,
-                      });
-                   }
-                }
-             } catch (err) {
-                console.warn("Failed to check PnL for", entry.positionId, err);
-             }
-          }
 
           if (triggerClose) {
             // Trigger auto-close via API

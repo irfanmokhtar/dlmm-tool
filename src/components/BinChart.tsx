@@ -1,6 +1,7 @@
 "use client";
 
 import { BinPosition } from "@/lib/dlmm";
+import { formatCompactDecimal } from "@/lib/format";
 
 interface BinChartProps {
   bins: BinPosition[];
@@ -79,14 +80,14 @@ export default function BinChart({
                   </p>
                   <p className="text-foreground">
                     {tokenXSymbol}:{" "}
-                    <span className="font-mono">{amountX.toFixed(4)}</span>
+                    <span className="font-mono">{formatCompactDecimal(amountX)}</span>
                   </p>
                   <p className="text-foreground">
                     {tokenYSymbol}:{" "}
-                    <span className="font-mono">{amountY.toFixed(4)}</span>
+                    <span className="font-mono">{formatCompactDecimal(amountY)}</span>
                   </p>
                   <p className="text-muted-foreground mt-1">
-                    Price: <span className="font-mono">{parseFloat(bin.price).toFixed(4)}</span>
+                    Price: <span className="font-mono">{formatCompactDecimal(bin.price)}</span>
                   </p>
                 </div>
               </div>
@@ -133,15 +134,12 @@ export default function BinChart({
         })}
       </div>
 
-      {/* Price labels */}
       <div className="flex justify-between text-[10px] text-muted-foreground font-mono px-2">
-        <span>{parseFloat(bins[0]?.price || "0").toFixed(2)}</span>
+        <span>{formatCompactDecimal(bins[0]?.price || "0")}</span>
         <span>
-          {parseFloat(bins[Math.floor(bins.length / 2)]?.price || "0").toFixed(
-            2
-          )}
+          {formatCompactDecimal(bins[Math.floor(bins.length / 2)]?.price || "0")}
         </span>
-        <span>{parseFloat(bins[bins.length - 1]?.price || "0").toFixed(2)}</span>
+        <span>{formatCompactDecimal(bins[bins.length - 1]?.price || "0")}</span>
       </div>
     </div>
   );
