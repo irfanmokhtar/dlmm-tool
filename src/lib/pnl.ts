@@ -16,11 +16,14 @@ export interface PositionCostBasis {
   positionAddress: string;
   lastParsedSignature: string | null;
   deposits: DepositEvent[];
+  totalDepositedX: number;
+  totalDepositedY: number;
   totalInitialValueUsd: number;
 }
 
 const CACHE_DIR = path.join(process.cwd(), "data");
 const CACHE_FILE = path.join(CACHE_DIR, "cost-basis-cache.json");
+const DLMM_PROGRAM_ID = "LBUZKhLz79uFqcGiEBwtHn6AVgVxs5YymSNozXfUByL";
 
 // Ensure cache directory exists
 if (!fs.existsSync(CACHE_DIR)) {
@@ -42,37 +45,61 @@ function saveCache(cache: Record<string, PositionCostBasis>) {
   fs.writeFileSync(CACHE_FILE, JSON.stringify(cache, null, 2));
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 /**
  * Fetch historical price from Birdeye
  * Fallback to 0 if no API key is set or the request fails.
+ * Includes exponential backoff for rate limits (429).
  */
-async function getHistoricalPrice(mint: string, timestamp: number): Promise<number> {
+async function getHistoricalPrice(mint: string, timestamp: number, retries = 3): Promise<number> {
   const apiKey = process.env.BIRDEYE_API_KEY;
   if (!apiKey) {
     console.warn("BIRDEYE_API_KEY not set. Cannot fetch historical price for", mint);
-    return 0; // Requires API key for accurate cost basis
+    return 0;
   }
 
-  try {
-    // Birdeye API expects seconds, but let's query a 1H candle around the timestamp
-    const url = `https://public-api.birdeye.so/defi/history_price?address=${mint}&address_type=token&type=1H&time_from=${timestamp - 3600}&time_to=${timestamp + 3600}`;
-    
-    const response = await fetch(url, {
-      headers: {
-        "X-API-KEY": apiKey,
-        "x-chain": "solana"
-      }
-    });
+  let delay = 1000; // start with 1s
 
-    if (response.ok) {
-      const data = await response.json();
-      if (data?.data?.items && data.data.items.length > 0) {
-        // Find the closest candle
-        return data.data.items[0].value;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const url = `https://public-api.birdeye.so/defi/history_price?address=${mint}&address_type=token&type=1H&time_from=${timestamp - 3600}&time_to=${timestamp + 3600}`;
+      
+      const response = await fetch(url, {
+        headers: {
+          "X-API-KEY": apiKey,
+          "x-chain": "solana"
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data?.data?.items && data.data.items.length > 0) {
+          return data.data.items[0].value;
+        }
+        return 0;
+      } 
+      
+      if (response.status === 429) {
+        if (attempt < retries) {
+          console.log(`[Birdeye] Rate limited (429). Retrying in ${delay}ms... (Attempt ${attempt + 1}/${retries})`);
+          await sleep(delay + Math.random() * 500); // Add jitter
+          delay *= 2; // exponential backoff
+          continue;
+        }
       }
+
+      const text = await response.text();
+      console.error(`[Birdeye] Failed for ${mint}: ${response.status} - ${text.slice(0, 100)}`);
+      break; // stop on other errors
+    } catch (err) {
+      if (attempt < retries) {
+        await sleep(delay);
+        delay *= 2;
+        continue;
+      }
+      console.warn(`Failed to fetch historical price for ${mint}:`, err);
     }
-  } catch (err) {
-    console.warn(`Failed to fetch historical price for ${mint}:`, err);
   }
   return 0;
 }
@@ -80,6 +107,7 @@ async function getHistoricalPrice(mint: string, timestamp: number): Promise<numb
 /**
  * Crawls transaction history for a position to calculate accurate cost basis
  * using the Delta Method (pre vs post token balances).
+ * Fallback to user wallet signatures if the position PDA history is empty.
  */
 export async function getCostBasisForPosition(
   connection: Connection,
@@ -95,30 +123,54 @@ export async function getCostBasisForPosition(
     positionAddress,
     lastParsedSignature: null,
     deposits: [],
+    totalDepositedX: 0,
+    totalDepositedY: 0,
     totalInitialValueUsd: 0,
   };
 
   try {
     const positionPubKey = new PublicKey(positionAddress);
+    const userPubKey = new PublicKey(userWallet);
     
-    // Fetch signatures (until we hit the last parsed one)
-    const options: any = { limit: 100 };
-    if (costBasis.lastParsedSignature) {
-      options.until = costBasis.lastParsedSignature;
+    // 1. Try fetching signatures for the position address directly
+    let signatures = await connection.getSignaturesForAddress(positionPubKey, { 
+      limit: 100, 
+      until: costBasis.lastParsedSignature || undefined 
+    });
+
+    console.log(`[PnL] Found ${signatures.length} signatures for position ${positionAddress}`);
+    
+    // 2. Fallback: Search user wallet history for position initialization/deposits
+    // Some PDAs are not indexed for signatures directly by all RPCs
+    // REFINED: If we have no deposits yet, we MUST search the wallet to find the entry point.
+    if (costBasis.deposits.length === 0) {
+      console.log(`[PnL] No deposits found in cache/PDA. Falling back to wallet ${userWallet} history...`);
+      const walletSignatures = await connection.getSignaturesForAddress(userPubKey, { limit: 100 });
+      
+      // Filter were done in the loop below, but we'll prepend these to the check list if needed
+      // Actually, we'll just use the wallet signatures if the PDA returns nothing or if we're desperate
+      if (signatures.length === 0) {
+        signatures = walletSignatures;
+      } else {
+        // Unique merge
+        const sigSet = new Set(signatures.map(s => s.signature));
+        for (const ws of walletSignatures) {
+          if (!sigSet.has(ws.signature)) {
+            signatures.push(ws);
+          }
+        }
+      }
     }
 
-    const signatures = await connection.getSignaturesForAddress(positionPubKey, options);
-    
     if (signatures.length === 0) {
-      return costBasis; // No new transactions
+      return costBasis;
     }
 
     // Process from oldest to newest
-    const newDeposits: DepositEvent[] = [];
     const reversedSignatures = [...signatures].reverse();
 
     for (const sigInfo of reversedSignatures) {
-      if (sigInfo.err) continue; // Skip failed txs
+      if (sigInfo.err) continue;
 
       const tx = await connection.getParsedTransaction(sigInfo.signature, {
         maxSupportedTransactionVersion: 0,
@@ -126,55 +178,59 @@ export async function getCostBasisForPosition(
 
       if (!tx || !tx.meta || !tx.blockTime) continue;
 
-      // Ensure this transaction actually modified user balances (deposit or withdraw)
+      // Filter: Must involve the position address
+      const involvesPosition = tx.transaction.message.accountKeys.some(
+        ak => ak.pubkey.toBase58() === positionAddress
+      );
+      if (!involvesPosition) continue;
+
+      // Delta Method: Check balance shifts in the user's wallet
       const preBalances = tx.meta.preTokenBalances || [];
       const postBalances = tx.meta.postTokenBalances || [];
 
-      // Find user balances for Mint X
       const preX = preBalances.find((b) => b.owner === userWallet && b.mint === mintX);
       const postX = postBalances.find((b) => b.owner === userWallet && b.mint === mintX);
-      
-      // Find user balances for Mint Y
       const preY = preBalances.find((b) => b.owner === userWallet && b.mint === mintY);
       const postY = postBalances.find((b) => b.owner === userWallet && b.mint === mintY);
 
-      // Delta: Pre minus Post (positive means tokens left the user's wallet = deposit)
-      const preAmountX = preX ? Number(preX.uiTokenAmount.uiAmountString) : 0;
-      const postAmountX = postX ? Number(postX.uiTokenAmount.uiAmountString) : 0;
-      const amountXDeposited = preAmountX - postAmountX;
+      // Delta (Pre - Post): Positive means tokens LEFT the wallet (Deposit)
+      const preAmtX = preX ? Number(preX.uiTokenAmount.uiAmountString) : 0;
+      const postAmtX = postX ? Number(postX.uiTokenAmount.uiAmountString) : 0;
+      const deltaX = preAmtX - postAmtX;
 
-      const preAmountY = preY ? Number(preY.uiTokenAmount.uiAmountString) : 0;
-      const postAmountY = postY ? Number(postY.uiTokenAmount.uiAmountString) : 0;
-      const amountYDeposited = preAmountY - postAmountY;
+      const preAmtY = preY ? Number(preY.uiTokenAmount.uiAmountString) : 0;
+      const postAmtY = postY ? Number(postY.uiTokenAmount.uiAmountString) : 0;
+      const deltaY = preAmtY - postAmtY;
 
-      // If user deposited tokens (positive delta for at least one token)
-      if (amountXDeposited > 0 || amountYDeposited > 0) {
-        // Need to value this exact deposit
-        const priceX = amountXDeposited > 0 ? await getHistoricalPrice(mintX, tx.blockTime) : 0;
-        const priceY = amountYDeposited > 0 ? await getHistoricalPrice(mintY, tx.blockTime) : 0;
+      // We only count deposits for "Cost Basis" (entry value)
+      // Withdrawals would reduce the "Current Value" side of the equation
+      if (deltaX > 0 || deltaY > 0) {
+        const amtX = Math.max(0, deltaX);
+        const amtY = Math.max(0, deltaY);
 
-        const usdValue = (amountXDeposited * priceX) + (amountYDeposited * priceY);
+        console.log(`[PnL] Detected deposit in ${sigInfo.signature}: X=${amtX}, Y=${amtY}`);
+        
+        const pxX = amtX > 0 ? await getHistoricalPrice(mintX, tx.blockTime) : 0;
+        const pxY = amtY > 0 ? await getHistoricalPrice(mintY, tx.blockTime) : 0;
+        const depositUsd = (amtX * pxX) + (amtY * pxY);
 
-        newDeposits.push({
+        costBasis.deposits.push({
           signature: sigInfo.signature,
           blockTime: tx.blockTime,
-          amountX: amountXDeposited,
-          amountY: amountYDeposited,
-          priceX,
-          priceY,
-          usdValue
+          amountX: amtX,
+          amountY: amtY,
+          priceX: pxX,
+          priceY: pxY,
+          usdValue: depositUsd
         });
+
+        costBasis.totalDepositedX += amtX;
+        costBasis.totalDepositedY += amtY;
+        costBasis.totalInitialValueUsd += depositUsd;
       }
     }
 
-    if (newDeposits.length > 0) {
-      costBasis.deposits.push(...newDeposits);
-      costBasis.totalInitialValueUsd = costBasis.deposits.reduce((acc, sum) => acc + sum.usdValue, 0);
-    }
-
-    costBasis.lastParsedSignature = signatures[0].signature; // most recent parsed
-
-    // Update Cache
+    costBasis.lastParsedSignature = signatures[0].signature;
     cache[positionAddress] = costBasis;
     saveCache(cache);
 

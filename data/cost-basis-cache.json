@@ -1,54 +1,28 @@
 {
-  "CT18xzghf472JFqKfUyGqJ8ydQN45YhS3DzKeRUCcvKr": {
-    "positionAddress": "CT18xzghf472JFqKfUyGqJ8ydQN45YhS3DzKeRUCcvKr",
-    "lastParsedSignature": "5sveJCNxTuHG2dqQwKSBycCgTepM2viD1Agx21dPSaATt7qm7QZp7eaeKgZM1sDzHZgiqgun1n54jgoVhbZHzABU",
+  "7CpNkVJQWCgu9H9suKtNDF46fzXCbF4QmRfqazdWbBPf": {
+    "positionAddress": "7CpNkVJQWCgu9H9suKtNDF46fzXCbF4QmRfqazdWbBPf",
+    "lastParsedSignature": "65r236CR5MUzKzVf168rcHXtvRVZWQge19SBF8ZFDmPBF7brPF8kxkZssGgmoNNv1RMW7D7xPShePq6XQu32EVFN",
     "deposits": [
       {
-        "signature": "4cKR2Dw8DpqvTQu9zZSMUXjQZtfn1dDDbvUvnLSHrnocrqxgbV4T5rfsZwpccWpFTkFfywVWTQw13zSCPoQxBUZZ",
-        "blockTime": 1775050746,
+        "signature": "65r236CR5MUzKzVf168rcHXtvRVZWQge19SBF8ZFDmPBF7brPF8kxkZssGgmoNNv1RMW7D7xPShePq6XQu32EVFN",
+        "blockTime": 1775136473,
         "amountX": 0,
-        "amountY": 49.89019,
-        "priceX": 0,
-        "priceY": 0,
-        "usdValue": 0
-      },
-      {
-        "signature": "4md1sv5pPSk3EPHs61cCqEkvQkpJicw3ZnMD3iDGDppCgH5u4WcRBhgQ28R8ZuZThm9mQ5WanQBRkjYTLPMoTKv8",
-        "blockTime": 1775050746,
-        "amountX": 0,
-        "amountY": 33.497699,
-        "priceX": 0,
-        "priceY": 0,
-        "usdValue": 0
-      },
-      {
-        "signature": "47omfLJtRxfMWgGqLiii1kHwiUUSsPj7xJLDqBGMhPTwnahC5j1yepBEaAGYZBR446RMxbvUvqcvxhHQmHUUqEKK",
-        "blockTime": 1775057213,
-        "amountX": 0,
-        "amountY": 38.49985999999999,
-        "priceX": 0,
-        "priceY": 0,
-        "usdValue": 0
-      },
-      {
-        "signature": "2ipMQwGyQXa3dXjHcWHUFRwZQu2ExMUubqYxRkJwFaftmNMPniZZ8jZDVi7J49zBjRCtSKWQtFXCQ8KxeYwfckYT",
-        "blockTime": 1775057213,
-        "amountX": 0,
-        "amountY": 38.499860000000005,
-        "priceX": 0,
-        "priceY": 0,
-        "usdValue": 0
-      },
-      {
-        "signature": "5sveJCNxTuHG2dqQwKSBycCgTepM2viD1Agx21dPSaATt7qm7QZp7eaeKgZM1sDzHZgiqgun1n54jgoVhbZHzABU",
-        "blockTime": 1775057213,
-        "amountX": 0,
-        "amountY": 6.599976,
+        "amountY": 82.407672,
         "priceX": 0,
         "priceY": 0,
         "usdValue": 0
       }
     ],
+    "totalDepositedX": 0,
+    "totalDepositedY": 82.407672,
+    "totalInitialValueUsd": 0
+  },
+  "8iZriD4sRARdjGqt2qq45N43nhChcNfp3aajnqrdXzsZ": {
+    "positionAddress": "8iZriD4sRARdjGqt2qq45N43nhChcNfp3aajnqrdXzsZ",
+    "lastParsedSignature": "65r236CR5MUzKzVf168rcHXtvRVZWQge19SBF8ZFDmPBF7brPF8kxkZssGgmoNNv1RMW7D7xPShePq6XQu32EVFN",
+    "deposits": [],
+    "totalDepositedX": 0,
+    "totalDepositedY": 0,
     "totalInitialValueUsd": 0
   }
 }

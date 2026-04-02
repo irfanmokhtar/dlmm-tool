@@ -63,15 +63,6 @@ export async function GET(request: NextRequest) {
       tokenY.mint.decimals ?? 6
     );
 
-    if (costBasis.totalInitialValueUsd === 0) {
-      return NextResponse.json({
-        costBasis: costBasis.totalInitialValueUsd,
-        currentValue: 0,
-        pnlPercentage: 0,
-        message: "No cost basis found (requires BIRDEYE_API_KEY for true valuation, or no deposits found)"
-      });
-    }
-
     // 3. Find current token amounts in the position
     const allPositions = await DLMM.getAllLbPairPositionsByUser(connection, new PublicKey(userWallet));
     const poolPositions = allPositions.get(poolAddress);
@@ -82,16 +73,14 @@ export async function GET(request: NextRequest) {
     if (poolPositions) {
       const pos = poolPositions.lbPairPositionsData.find(p => p.publicKey.toBase58() === positionAddress);
       if (pos) {
-        // Principal in bins (PositionBinData has positionXAmount for user's share in raw units as string)
         if (pos.positionData.positionBinData) {
           for (const bin of pos.positionData.positionBinData as any[]) {
             currentX += parseFloat(bin.positionXAmount || "0");
             currentY += parseFloat(bin.positionYAmount || "0");
           }
         }
-        // Unclaimed Fees
-        currentX += Number(pos.positionData.feeX?.toString() || "0") / Math.pow(10, tokenX.mint.decimals ?? 9);
-        currentY += Number(pos.positionData.feeY?.toString() || "0") / Math.pow(10, tokenY.mint.decimals ?? 6);
+        currentX += Number(pos.positionData.feeX?.toString() || "0");
+        currentY += Number(pos.positionData.feeY?.toString() || "0");
       }
     }
 
@@ -99,25 +88,43 @@ export async function GET(request: NextRequest) {
     const normalizedCurrentY = currentY / Math.pow(10, tokenY.mint.decimals ?? 6);
 
     // 4. Get Live Prices
-    const livePrices = await getLivePrice([mintX, mintY]);
+    const solMint = "So11111111111111111111111111111111111111112";
+    const livePrices = await getLivePrice([mintX, mintY, solMint]);
     const priceX = livePrices[mintX] || 0;
     const priceY = livePrices[mintY] || 0;
+    const priceSol = livePrices[solMint] || 0;
 
-    // 5. Calculate Current Value
+    // 5. Calculate Metrics
     const currentValueUsd = (normalizedCurrentX * priceX) + (normalizedCurrentY * priceY);
-
-    // 6. Calculate PnL %
-    const pnlPercentage = ((currentValueUsd - costBasis.totalInitialValueUsd) / costBasis.totalInitialValueUsd) * 100;
+    
+    // HODL Value: If we just held the deposited tokens in wallet
+    const hodlValueUsd = (costBasis.totalDepositedX * priceX) + (costBasis.totalDepositedY * priceY);
+    
+    // Divergence Loss (IL): Current Value relative to HODL Value
+    const divergenceLossUsd = hodlValueUsd > 0 ? currentValueUsd - hodlValueUsd : 0;
+    
+    // Net PnL (including yield)
+    const pnlUsd = currentValueUsd - costBasis.totalInitialValueUsd;
+    const pnlSol = priceSol > 0 ? pnlUsd / priceSol : 0;
+    const pnlPercentage = costBasis.totalInitialValueUsd > 0 
+      ? (pnlUsd / costBasis.totalInitialValueUsd) * 100 
+      : 0;
 
     return NextResponse.json({
       positionAddress,
       costBasisUsd: costBasis.totalInitialValueUsd,
       currentValueUsd,
+      hodlValueUsd,
+      divergenceLossUsd,
+      pnlUsd,
+      pnlSol,
+      pnlPercentage,
+      totalDepositedX: costBasis.totalDepositedX,
+      totalDepositedY: costBasis.totalDepositedY,
       currentTokens: {
         x: normalizedCurrentX,
         y: normalizedCurrentY
-      },
-      pnlPercentage,
+      }
     });
     
   } catch (err) {

@@ -17,6 +17,8 @@ import AutoCloseLogs from "@/components/AutoCloseLogs";
 import { useAutoCloseContext } from "@/components/AutoCloseMonitor";
 import { usePositionData } from "@/components/PositionProvider";
 import TokenLogo from "@/components/TokenLogo";
+import PnLStats from "@/components/PnLStats";
+
 
 export default function PositionDetailPage() {
   const params = useParams();
@@ -108,6 +110,13 @@ export default function PositionDetailPage() {
         </div>
         <PositionHealth score={health.score} status={health.status} />
       </div>
+
+      {/* PnL Stats */}
+      <PnLStats 
+        positionAddress={positionId} 
+        userWallet={publicKey?.toBase58() || ""} 
+        poolAddress={position.poolAddress}
+      />
 
       {/* Info Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
