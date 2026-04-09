@@ -18,6 +18,7 @@ import { useAutoCloseContext } from "@/components/AutoCloseMonitor";
 import { usePositionData } from "@/components/PositionProvider";
 import TokenLogo from "@/components/TokenLogo";
 import { formatCompactDecimal } from "@/lib/format";
+import RefreshSettings from "@/components/RefreshSettings";
 
 
 export default function PositionDetailPage() {
@@ -93,111 +94,60 @@ export default function PositionDetailPage() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-4">
-          <TokenLogo
-            src={position.tokenX.logoURI}
-            symbol={position.tokenX.symbol}
-            className="w-12 h-12 text-lg font-bold shadow-teal-500/20"
-            backgroundColor="#14b8a6"
-          />
+          {/* Overlapping pair logo */}
+          <div className="relative w-12 h-12 rounded-full">
+            <TokenLogo
+              src={position.tokenX.logoURI}
+              symbol={position.tokenX.symbol}
+              className="absolute left-0 w-8 h-8 z-10 text-xs"
+              backgroundColor="#8b5cf6"
+            />
+            <TokenLogo
+              src={position.tokenY.logoURI}
+              symbol={position.tokenY.symbol}
+              className="absolute right-0 w-8 h-8 z-20 text-xs"
+              backgroundColor="#14b8a6"
+            />
+          </div>
           <div>
             <h1 className="text-2xl font-bold text-foreground">
               {position.poolName}
             </h1>
-            <p className="text-xs text-muted-foreground font-mono">
-              {position.publicKey.toBase58()}
-            </p>
+            <div className="flex items-center gap-2 mt-1">
+              <a
+                href={`https://app.meteora.ag/dlmm/${position.poolAddress}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[10px] text-teal-400 hover:text-teal-300 transition-colors flex items-center gap-1"
+              >
+                Meteora
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </a>
+              <span className="text-muted-foreground/30">•</span>
+              <a
+                href={`https://gmgn.ai/sol/token/${position.tokenX.mint}_${position.tokenY.mint}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[10px] text-violet-400 hover:text-violet-300 transition-colors flex items-center gap-1"
+              >
+                GMGN
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </a>
+            </div>
           </div>
         </div>
-        <PositionHealth score={health.score} status={health.status} />
+        <div className="flex items-center gap-4">
+          <RefreshSettings />
+          <PositionHealth score={health.score} status={health.status} />
+        </div>
       </div>
 
 
-      {/* Info Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Active Price */}
-        <Card className="bg-white/[0.03] border-white/[0.06] backdrop-blur-sm">
-          <CardContent className="p-5">
-            <p className="text-xs text-muted-foreground mb-1">Active Price</p>
-            <p className="text-2xl font-mono font-bold bg-gradient-to-r from-teal-400 to-cyan-300 bg-clip-text text-transparent">
-              {formatCompactDecimal(position.activeBinPrice)}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {position.tokenY.symbol} per {position.tokenX.symbol}
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Token Balances */}
-        <Card className="bg-white/[0.03] border-white/[0.06] backdrop-blur-sm">
-          <CardContent className="p-5 space-y-3">
-            <p className="text-xs text-muted-foreground">Token Balances</p>
-            <div className="flex justify-between items-center">
-              <Badge
-                variant="outline"
-                className="bg-violet-500/10 text-violet-400 border-violet-500/20"
-              >
-                {position.tokenX.symbol}
-              </Badge>
-              <span className="font-mono font-semibold text-sm">
-                {formatCompactDecimal(position.positionData.totalXAmount)}
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <Badge
-                variant="outline"
-                className="bg-teal-500/10 text-teal-400 border-teal-500/20"
-              >
-                {position.tokenY.symbol}
-              </Badge>
-              <span className="font-mono font-semibold text-sm">
-                {formatCompactDecimal(position.positionData.totalYAmount)}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Bin Range */}
-        <Card className="bg-white/[0.03] border-white/[0.06] backdrop-blur-sm">
-          <CardContent className="p-5 space-y-3">
-            <p className="text-xs text-muted-foreground">Bin Range</p>
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-muted-foreground">Lower</span>
-              <span className="font-mono font-semibold text-sm">
-                {position.positionData.lowerBinId}
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-muted-foreground">Upper</span>
-              <span className="font-mono font-semibold text-sm">
-                {position.positionData.upperBinId}
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-muted-foreground">Active</span>
-              <span className="font-mono font-semibold text-sm text-teal-400">
-                {position.activeBinId}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Bin Distribution Chart */}
-      <Card className="bg-white/[0.03] border-white/[0.06] backdrop-blur-sm">
-        <CardContent className="p-5">
-          <h3 className="text-sm font-semibold text-foreground mb-4">
-            Bin Distribution
-          </h3>
-          <BinChart
-            bins={position.positionData.positionBinData}
-            activeBinId={position.activeBinId}
-            tokenXSymbol={position.tokenX.symbol}
-            tokenYSymbol={position.tokenY.symbol}
-          />
-        </CardContent>
-      </Card>
-
-      {/* Fees & Actions */}
+      {/* Fees & Token Balances */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Fees */}
         <Card className="bg-white/[0.03] border-white/[0.06] backdrop-blur-sm">
@@ -209,9 +159,17 @@ export default function PositionDetailPage() {
               <div className="space-y-3">
                 {parseFloat(position.positionData.feeX) > 0 && (
                   <div className="flex justify-between items-center px-3 py-2 rounded-lg bg-emerald-500/5 border border-emerald-500/10">
-                    <span className="text-sm text-emerald-400">
-                      {position.tokenX.symbol} Fees
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <TokenLogo
+                        src={position.tokenX.logoURI}
+                        symbol={position.tokenX.symbol}
+                        className="w-4 h-4 text-xs"
+                        backgroundColor="#8b5cf6"
+                      />
+                      <span className="text-sm text-emerald-400">
+                        {position.tokenX.symbol} Fees
+                      </span>
+                    </div>
                     <span className="font-mono text-sm font-semibold text-emerald-400">
                       {formatCompactDecimal(position.positionData.feeX)}
                     </span>
@@ -219,9 +177,17 @@ export default function PositionDetailPage() {
                 )}
                 {parseFloat(position.positionData.feeY) > 0 && (
                   <div className="flex justify-between items-center px-3 py-2 rounded-lg bg-emerald-500/5 border border-emerald-500/10">
-                    <span className="text-sm text-emerald-400">
-                      {position.tokenY.symbol} Fees
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <TokenLogo
+                        src={position.tokenY.logoURI}
+                        symbol={position.tokenY.symbol}
+                        className="w-4 h-4 text-xs"
+                        backgroundColor="#14b8a6"
+                      />
+                      <span className="text-sm text-emerald-400">
+                        {position.tokenY.symbol} Fees
+                      </span>
+                    </div>
                     <span className="font-mono text-sm font-semibold text-emerald-400">
                       {formatCompactDecimal(position.positionData.feeY)}
                     </span>
@@ -236,48 +202,116 @@ export default function PositionDetailPage() {
           </CardContent>
         </Card>
 
-        {/* Actions */}
+        {/* Token Balances */}
         <Card className="bg-white/[0.03] border-white/[0.06] backdrop-blur-sm">
-          <CardContent className="p-5">
-            <h3 className="text-sm font-semibold text-foreground mb-4">
-              Actions
-            </h3>
-            <div className="space-y-3">
-              {/* Auto-Close Toggle */}
-              <AutoCloseToggle
-                positionId={positionId}
-                poolAddress={position.poolAddress}
-                lowerBinId={position.positionData.lowerBinId}
-                upperBinId={position.positionData.upperBinId}
-                isEnabled={autoClose.isAutoCloseEnabled(positionId)}
-                status={autoClose.getStatus(positionId)}
-                error={autoClose.getError(positionId)}
-                onEnable={autoClose.enableAutoClose}
-                onDisable={autoClose.disableAutoClose}
-              />
-
-              <Separator className="bg-white/5" />
-
-              <Button
-                className="w-full bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white shadow-lg shadow-emerald-500/10"
-                disabled={!hasFees}
-              >
-                Claim All Fees
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full border-rose-500/20 text-rose-400 hover:bg-rose-500/10"
-              >
-                Withdraw All Liquidity
-              </Button>
+          <CardContent className="p-5 space-y-3">
+            <p className="text-xs text-muted-foreground">Token Balances</p>
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <TokenLogo
+                  src={position.tokenX.logoURI}
+                  symbol={position.tokenX.symbol}
+                  className="w-5 h-5 text-xs"
+                  backgroundColor="#8b5cf6"
+                />
+                <span className="text-sm font-medium">{position.tokenX.symbol}</span>
+              </div>
+              <span className="font-mono font-semibold text-sm">
+                {formatCompactDecimal(position.positionData.totalXAmount)}
+              </span>
             </div>
-            <p className="text-[10px] text-muted-foreground mt-3">
-              Actions execute on-chain transactions. You'll be asked to sign
-              with your wallet.
-            </p>
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <TokenLogo
+                  src={position.tokenY.logoURI}
+                  symbol={position.tokenY.symbol}
+                  className="w-5 h-5 text-xs"
+                  backgroundColor="#14b8a6"
+                />
+                <span className="text-sm font-medium">{position.tokenY.symbol}</span>
+              </div>
+              <span className="font-mono font-semibold text-sm">
+                {formatCompactDecimal(position.positionData.totalYAmount)}
+              </span>
+            </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Bin Distribution Chart */}
+      <Card className="bg-white/[0.03] border-white/[0.06] backdrop-blur-sm">
+        <CardContent className="p-5 space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h3 className="text-sm font-semibold text-foreground">
+              Bin Distribution
+            </h3>
+            <div className="text-xs text-muted-foreground flex items-center gap-4">
+              <div>
+                <span className="text-zinc-500">Active Price:</span>{" "}
+                <span className="font-mono text-teal-400">{formatCompactDecimal(position.activeBinPrice)}</span>{" "}
+                <span className="text-zinc-500">({position.tokenY.symbol}/{position.tokenX.symbol})</span>
+              </div>
+              <Separator orientation="vertical" className="h-4 bg-white/10" />
+              <div className="flex items-center gap-3">
+                <span className="text-zinc-500">Range:</span>
+                <span className="font-mono text-xs">
+                  <span className="text-violet-400">{position.positionData.lowerBinId}</span>
+                  <span className="text-zinc-600 mx-1">→</span>
+                  <span className="text-teal-400">{position.positionData.upperBinId}</span>
+                </span>
+              </div>
+            </div>
+          </div>
+          <BinChart
+            bins={position.positionData.positionBinData}
+            activeBinId={position.activeBinId}
+            tokenXSymbol={position.tokenX.symbol}
+            tokenYSymbol={position.tokenY.symbol}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Actions */}
+      <Card className="bg-white/[0.03] border-white/[0.06] backdrop-blur-sm">
+        <CardContent className="p-5">
+          <h3 className="text-sm font-semibold text-foreground mb-4">
+            Actions
+          </h3>
+          <div className="space-y-3">
+            {/* Auto-Close Toggle */}
+            <AutoCloseToggle
+              positionId={positionId}
+              poolAddress={position.poolAddress}
+              lowerBinId={position.positionData.lowerBinId}
+              upperBinId={position.positionData.upperBinId}
+              isEnabled={autoClose.isAutoCloseEnabled(positionId)}
+              status={autoClose.getStatus(positionId)}
+              error={autoClose.getError(positionId)}
+              onEnable={autoClose.enableAutoClose}
+              onDisable={autoClose.disableAutoClose}
+            />
+
+            <Separator className="bg-white/5" />
+
+            <Button
+              className="w-full bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white shadow-lg shadow-emerald-500/10"
+              disabled={!hasFees}
+            >
+              Claim All Fees
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full border-rose-500/20 text-rose-400 hover:bg-rose-500/10"
+            >
+              Withdraw All Liquidity
+            </Button>
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-3">
+            Actions execute on-chain transactions. You'll be asked to sign
+            with your wallet.
+          </p>
+        </CardContent>
+      </Card>
 
       {/* Monitoring Logs */}
       <AutoCloseLogs positionId={positionId} />

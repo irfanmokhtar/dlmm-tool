@@ -3,6 +3,9 @@
 import { usePositionData } from "./PositionProvider";
 
 const INTERVALS = [
+  { label: "3s", value: 3_000 },
+  { label: "5s", value: 5_000 },
+  { label: "10s", value: 10_000 },
   { label: "15s", value: 15_000 },
   { label: "30s", value: 30_000 },
   { label: "1m", value: 60_000 },

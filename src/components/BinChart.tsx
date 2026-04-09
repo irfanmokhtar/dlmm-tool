@@ -24,7 +24,8 @@ export default function BinChart({
     );
   }
 
-  // Calculate max amounts for scaling
+  // Calculate max amounts for scaling - scale X and Y independently
+  // so both token types are visible even when one dominates
   const maxAmountX = Math.max(
     ...bins.map((b) => parseFloat(b.amountX) || 0),
     0.0001
@@ -33,7 +34,6 @@ export default function BinChart({
     ...bins.map((b) => parseFloat(b.amountY) || 0),
     0.0001
   );
-  const maxAmount = Math.max(maxAmountX, maxAmountY);
 
   return (
     <div className="space-y-2">
@@ -58,10 +58,12 @@ export default function BinChart({
         {bins.map((bin) => {
           const amountX = parseFloat(bin.amountX) || 0;
           const amountY = parseFloat(bin.amountY) || 0;
-          const heightX = (amountX / maxAmount) * 100;
-          const heightY = (amountY / maxAmount) * 100;
+          // Scale each token independently so both are visible
+          const heightX = (amountX / maxAmountX) * 100;
+          const heightY = (amountY / maxAmountY) * 100;
           const isActive = bin.binId === activeBinId;
-          const totalHeight = Math.max(heightX + heightY, 2);
+          // Total height is the max of the two, not the sum
+          const totalHeight = Math.max(heightX, heightY, 2);
 
           return (
             <div
@@ -71,23 +73,23 @@ export default function BinChart({
             >
               {/* Tooltip on hover */}
               <div className="absolute bottom-full mb-2 hidden group-hover:block z-10">
-                <div className="bg-black/90 border border-white/10 rounded-lg px-3 py-2 text-xs whitespace-nowrap backdrop-blur-sm shadow-xl">
-                  <p className="text-muted-foreground mb-1">
+                <div className="bg-zinc-900/95 border border-white/20 rounded-lg px-3 py-2 text-xs whitespace-nowrap backdrop-blur-sm shadow-xl">
+                  <p className="text-zinc-400 mb-1">
                     Bin #{bin.binId}
                     {isActive && (
                       <span className="ml-1 text-yellow-400">★ Active</span>
                     )}
                   </p>
-                  <p className="text-foreground">
+                  <p className="text-white mb-0.5">
                     {tokenXSymbol}:{" "}
-                    <span className="font-mono">{formatCompactDecimal(amountX)}</span>
+                    <span className="font-mono text-violet-400">{formatCompactDecimal(amountX)}</span>
                   </p>
-                  <p className="text-foreground">
+                  <p className="text-white mb-0.5">
                     {tokenYSymbol}:{" "}
-                    <span className="font-mono">{formatCompactDecimal(amountY)}</span>
+                    <span className="font-mono text-teal-400">{formatCompactDecimal(amountY)}</span>
                   </p>
-                  <p className="text-muted-foreground mt-1">
-                    Price: <span className="font-mono">{formatCompactDecimal(bin.price)}</span>
+                  <p className="text-zinc-400 mt-1">
+                    Price: <span className="font-mono text-white">{formatCompactDecimal(bin.price)}</span>
                   </p>
                 </div>
               </div>
@@ -101,26 +103,35 @@ export default function BinChart({
                 }`}
                 style={{ height: `${totalHeight}%`, minHeight: "2px" }}
               >
-                {/* Y amount (bottom) */}
-                <div
-                  className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-teal-600 to-teal-400"
-                  style={{
-                    height:
-                      totalHeight > 0
-                        ? `${(heightY / (heightX + heightY)) * 100}%`
-                        : "0%",
-                  }}
-                />
-                {/* X amount (top) */}
-                <div
-                  className="absolute top-0 left-0 right-0 bg-gradient-to-t from-violet-600 to-violet-400"
-                  style={{
-                    height:
-                      totalHeight > 0
-                        ? `${(heightX / (heightX + heightY)) * 100}%`
-                        : "0%",
-                  }}
-                />
+                {/* Determine which token dominates - show that color */}
+                {amountY >= amountX ? (
+                  /* USDC dominates - show teal */
+                  <div
+                    className="absolute inset-0 bg-gradient-to-t from-teal-600 to-teal-400"
+                  />
+                ) : (
+                  /* SOL dominates - show purple */
+                  <div
+                    className="absolute inset-0 bg-gradient-to-t from-violet-600 to-violet-400"
+                  />
+                )}
+                {/* Show small portion of other token if both exist */}
+                {amountX > 0 && amountY > 0 && (
+                  <div
+                    className="absolute bottom-0 left-0 right-0"
+                    style={{
+                      height: `${Math.min((amountY / (amountX + amountY)) * 100, 30)}%`,
+                    }}
+                  >
+                    {amountY >= amountX ? (
+                      /* USDC dominates, show small purple at bottom */
+                      <div className="absolute inset-0 bg-gradient-to-t from-violet-600 to-violet-400 opacity-50" />
+                    ) : (
+                      /* SOL dominates, show small teal at bottom */
+                      <div className="absolute inset-0 bg-gradient-to-t from-teal-600 to-teal-400 opacity-50" />
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Active bin marker */}

@@ -21,7 +21,7 @@ export default function TokenLogo({ src, symbol, className, backgroundColor }: T
         <img
           src={src}
           alt={symbol}
-          className="relative w-full h-full rounded-full object-cover ring-1 ring-white/10"
+          className="relative w-full h-full rounded-full object-cover"
           onError={(e) => {
             console.warn(`[TokenLogo] Failed to load logo for ${symbol} from ${src}`);
             setError(true);

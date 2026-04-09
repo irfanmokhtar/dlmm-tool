@@ -66,10 +66,10 @@ export default function PositionHealth({
       </TooltipTrigger>
       <TooltipContent
         side="top"
-        className="bg-black/90 border-white/10 backdrop-blur-sm"
+        className="bg-zinc-900/95 border-white/20 backdrop-blur-sm text-white"
       >
         <p className="text-xs">
-          <span className="font-semibold">Health: {score}%</span> —{" "}
+          <span className="font-semibold text-emerald-400">Health: {score}%</span> —{" "}
           {config.description}
         </p>
       </TooltipContent>
