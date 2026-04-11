@@ -5,19 +5,10 @@ import { Separator } from "@/components/ui/separator";
 import TokenLogo from "@/components/TokenLogo";
 import { formatCompactDecimal } from "@/lib/format";
 import { UserPosition } from "@/lib/dlmm";
+import { usePnLCurrency, deriveSolPrice } from "@/components/PnLCurrencyProvider";
 
 interface PositionOverviewProps {
   position: UserPosition;
-}
-
-function formatUsd(value?: string) {
-  if (!value || Number.isNaN(Number(value))) return "—";
-  const amount = Number(value);
-  return amount.toLocaleString(undefined, {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
-  });
 }
 
 function formatPercent(value?: string) {
@@ -27,6 +18,8 @@ function formatPercent(value?: string) {
 }
 
 export default function PositionOverview({ position }: PositionOverviewProps) {
+  const { currency, toggleCurrency, formatValue } = usePnLCurrency();
+  const solPrice = deriveSolPrice(position);
   const positive = Number(position.pnlUsd) >= 0;
   const pnlClass = positive ? "text-emerald-400" : "text-rose-400";
 
@@ -41,11 +34,25 @@ export default function PositionOverview({ position }: PositionOverviewProps) {
         <CardContent className="p-5">
           <div className="space-y-4">
             <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-[0.18em] mb-1">
-                Position PnL
-              </p>
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs text-muted-foreground uppercase tracking-[0.18em]">
+                  Position PnL
+                </p>
+                <button
+                  onClick={(e) => { e.preventDefault(); toggleCurrency(); }}
+                  className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-white/10 bg-white/5 text-muted-foreground hover:text-foreground hover:border-white/20 transition-colors"
+                  title={`Switch to ${currency === "USD" ? "SOL" : "USD"}`}
+                >
+                  {currency === "USD" ? "$ USD" : "◎ SOL"}
+                </button>
+              </div>
               <p className={`text-2xl font-bold ${pnlClass}`}>
-                {formatUsd(position.pnlUsd)}
+                {currency === "USD"
+                  ? formatValue(position.pnlUsd)
+                  : solPrice
+                    ? (Number(position.pnlUsd) >= 0 ? "+" : "") + "◎" + Math.abs(Number(position.pnlUsd) / solPrice).toFixed(4)
+                    : "—"
+                }
               </p>
               <p className={`text-sm font-semibold ${pnlClass}`}>
                 {formatPercent(position.pnlPercent)}

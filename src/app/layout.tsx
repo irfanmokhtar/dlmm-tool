@@ -17,6 +17,7 @@ const jetbrainsMono = JetBrains_Mono({
 
 import PositionProvider from "@/components/PositionProvider";
 import AutoCloseMonitor from "@/components/AutoCloseMonitor";
+import { PnLCurrencyProvider } from "@/components/PnLCurrencyProvider";
 
 export const metadata: Metadata = {
   title: "Meteora LP | DLMM Position Manager",
@@ -38,10 +39,12 @@ export default function RootLayout({
         <WalletProvider>
           <PositionProvider>
             <AutoCloseMonitor>
-              <TooltipProvider>
-                <Sidebar />
-                <main className="flex-1 overflow-y-auto">{children}</main>
-              </TooltipProvider>
+              <PnLCurrencyProvider>
+                <TooltipProvider>
+                  <Sidebar />
+                  <main className="flex-1 overflow-y-auto">{children}</main>
+                </TooltipProvider>
+              </PnLCurrencyProvider>
             </AutoCloseMonitor>
           </PositionProvider>
         </WalletProvider>

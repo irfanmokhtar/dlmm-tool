@@ -7,6 +7,7 @@ import { UserPosition, calculatePositionHealth, BinPosition } from "@/lib/dlmm";
 import { TOKEN_COLORS } from "@/lib/constants";
 import PositionHealth from "./PositionHealth";
 import { useAutoCloseContext } from "./AutoCloseMonitor";
+import { usePnLCurrency, deriveSolPrice } from "./PnLCurrencyProvider";
 import TokenLogo from "./TokenLogo";
 
 interface PositionCardProps {
@@ -100,6 +101,23 @@ export default function PositionCard({ position }: PositionCardProps) {
   const colorY = TOKEN_COLORS[position.tokenY.symbol] || "#06b6d4";
   const autoClose = useAutoCloseContext();
   const isAutoCloseOn = autoClose.isAutoCloseEnabled(position.publicKey.toBase58());
+  const { currency, toggleCurrency } = usePnLCurrency();
+  const solPrice = deriveSolPrice(position);
+
+  const pnlDisplayValue = (() => {
+    if (position.pnlUsd == null) return null;
+    const usd = Number(position.pnlUsd);
+    if (currency === "USD") {
+      return (usd >= 0 ? "+" : "") + usd.toLocaleString(undefined, {
+        style: "currency",
+        currency: "USD",
+        maximumFractionDigits: 2,
+      });
+    }
+    if (!solPrice) return null;
+    const sol = usd / solPrice;
+    return `${usd >= 0 ? "+" : ""}◎${Math.abs(sol).toFixed(4)}`;
+  })();
 
   return (
     <Link href={`/position/${position.publicKey.toBase58()}`}>
@@ -131,18 +149,17 @@ export default function PositionCard({ position }: PositionCardProps) {
                 </p>
               </div>
             </div>
-            {position.pnlUsd != null && position.pnlPercent != null && (
+            {pnlDisplayValue != null && position.pnlPercent != null && (
               <div className="text-right shrink-0">
-                <p className={`text-sm font-mono font-semibold ${
-                  Number(position.pnlUsd) >= 0 ? "text-emerald-400" : "text-rose-400"
-                }`}>
-                  {Number(position.pnlUsd) >= 0 ? "+" : ""}
-                  {Number(position.pnlUsd).toLocaleString(undefined, {
-                    style: "currency",
-                    currency: "USD",
-                    maximumFractionDigits: 2,
-                  })}
-                </p>
+                <button
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleCurrency(); }}
+                  className={`text-sm font-mono font-semibold ${
+                    Number(position.pnlUsd) >= 0 ? "text-emerald-400" : "text-rose-400"
+                  } hover:opacity-80 transition-opacity`}
+                  title={`Switch to ${currency === "USD" ? "SOL" : "USD"}`}
+                >
+                  {pnlDisplayValue}
+                </button>
                 <p className={`text-[10px] font-mono font-medium ${
                   Number(position.pnlPercent) >= 0 ? "text-emerald-400/70" : "text-rose-400/70"
                 }`}>
