@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { UserPosition, calculatePositionHealth } from "@/lib/dlmm";
+import { UserPosition, calculatePositionHealth, BinPosition } from "@/lib/dlmm";
 import { TOKEN_COLORS } from "@/lib/constants";
 import PositionHealth from "./PositionHealth";
 import { useAutoCloseContext } from "./AutoCloseMonitor";
@@ -11,6 +11,82 @@ import TokenLogo from "./TokenLogo";
 
 interface PositionCardProps {
   position: UserPosition;
+}
+
+/** Compact bin distribution chart for the position card */
+function MiniBinChart({
+  bins,
+  activeBinId,
+  lowerBinId,
+  upperBinId,
+}: {
+  bins: BinPosition[];
+  activeBinId: number;
+  lowerBinId: number;
+  upperBinId: number;
+}) {
+  if (!bins || bins.length === 0) {
+    // Fallback to simple range bar
+    return (
+      <div className="w-full h-2 rounded-full bg-white/5" />
+    );
+  }
+
+  const maxAmountX = Math.max(...bins.map((b) => parseFloat(b.amountX) || 0), 0.0001);
+  const maxAmountY = Math.max(...bins.map((b) => parseFloat(b.amountY) || 0), 0.0001);
+  const totalBins = upperBinId - lowerBinId + 1;
+  const activeBinInRange = activeBinId >= lowerBinId && activeBinId <= upperBinId;
+
+  return (
+    <div className="relative w-full h-8 flex items-end gap-px">
+      {bins.map((bin) => {
+        const amountX = parseFloat(bin.amountX) || 0;
+        const amountY = parseFloat(bin.amountY) || 0;
+        const heightX = (amountX / maxAmountX) * 100;
+        const heightY = (amountY / maxAmountY) * 100;
+        const totalHeight = Math.max(heightX, heightY, 4);
+        const isActive = bin.binId === activeBinId;
+        const hasLiquidity = amountX > 0 || amountY > 0;
+
+        return (
+          <div
+            key={bin.binId}
+            className="flex-1 flex flex-col justify-end min-w-[2px]"
+            style={{ height: "100%" }}
+          >
+            <div
+              className={`w-full rounded-t-sm transition-opacity ${
+                isActive
+                  ? "ring-1 ring-yellow-400/60"
+                  : hasLiquidity
+                  ? "opacity-80"
+                  : "opacity-30"
+              }`}
+              style={{
+                height: `${totalHeight}%`,
+                minHeight: hasLiquidity ? "2px" : "1px",
+              }}
+            >
+              {amountY >= amountX ? (
+                <div className="w-full h-full bg-gradient-to-t from-teal-600/80 to-teal-400/80" />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-t from-violet-600/80 to-violet-400/80" />
+              )}
+            </div>
+          </div>
+        );
+      })}
+      {/* Active bin indicator line */}
+      {activeBinInRange && (
+        <div
+          className="absolute top-0 bottom-0 w-0.5 bg-yellow-400/80 pointer-events-none"
+          style={{
+            left: `${((activeBinId - lowerBinId) / totalBins) * 100}%`,
+          }}
+        />
+      )}
+    </div>
+  );
 }
 
 export default function PositionCard({ position }: PositionCardProps) {
@@ -131,35 +207,18 @@ export default function PositionCard({ position }: PositionCardProps) {
             </div>
           </div>
 
-          {/* Range */}
+          {/* Bin Distribution */}
           <div className="mb-3">
             <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
               <span>Bin {position.positionData.lowerBinId}</span>
               <span>Bin {position.positionData.upperBinId}</span>
             </div>
-            {/* Range visualization */}
-            <div className="w-full h-1.5 rounded-full bg-white/5 relative overflow-hidden">
-              <div
-                className="absolute h-full rounded-full bg-gradient-to-r from-teal-500/50 to-cyan-500/50"
-                style={{ left: "0%", width: "100%" }}
-              />
-              {/* Active bin indicator */}
-              {health.status !== "out-of-range" && (
-                <div
-                  className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-teal-400 shadow-lg shadow-teal-400/50 border border-white/30"
-                  style={{
-                    left: `${
-                      ((position.activeBinId -
-                        position.positionData.lowerBinId) /
-                        (position.positionData.upperBinId -
-                          position.positionData.lowerBinId)) *
-                      100
-                    }%`,
-                    transform: "translate(-50%, -50%)",
-                  }}
-                />
-              )}
-            </div>
+            <MiniBinChart
+              bins={position.positionData.positionBinData}
+              activeBinId={position.activeBinId}
+              lowerBinId={position.positionData.lowerBinId}
+              upperBinId={position.positionData.upperBinId}
+            />
           </div>
 
           {/* Unclaimed Fees */}
