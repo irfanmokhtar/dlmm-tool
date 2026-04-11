@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Connection, Keypair, PublicKey, sendAndConfirmTransaction } from "@solana/web3.js";
-import { closePosition } from "@/lib/dlmm";
+import { Connection, Keypair, PublicKey } from "@solana/web3.js";
+import { closePositionWithRetry } from "@/lib/dlmm";
+import { logger } from "@/lib/logger";
 import bs58 from "bs58";
 
 /**
@@ -8,6 +9,10 @@ import bs58 from "bs58";
  * 
  * Server-side handler that signs and sends close-position transactions
  * using the private key stored in env. This keeps the key server-only.
+ *
+ * For positions spanning >70 bins, the Meteora SDK returns multiple transactions.
+ * This handler uses atomic sending (one blockhash for all txs, send all, then confirm all)
+ * with retry logic for failed chunks.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -53,41 +58,59 @@ export async function POST(request: NextRequest) {
     }
 
     const connection = new Connection(rpcUrl, "confirmed");
-    const userPubKey = keypair.publicKey;
 
-    console.log(`[Auto-Close] Closing position ${positionId} for wallet ${userPubKey.toBase58()}`);
+    logger.info(`[Auto-Close] Closing position ${positionId} for wallet ${keypair.publicKey.toBase58()}`);
 
-    // Build close transactions
-    const transactions = await closePosition(
+    // Use atomic transaction sending with retry logic
+    const result = await closePositionWithRetry(
       connection,
-      userPubKey,
+      keypair,
       poolAddress,
       new PublicKey(positionId),
       lowerBinId,
       upperBinId
     );
 
-    // Sign and send each transaction
-    const signatures: string[] = [];
-    for (const tx of transactions) {
-      tx.feePayer = userPubKey;
-      const latestBlockhash = await connection.getLatestBlockhash();
-      tx.recentBlockhash = latestBlockhash.blockhash;
-
-      const signature = await sendAndConfirmTransaction(connection, tx, [keypair], {
-        commitment: "confirmed",
+    if (result.success) {
+      return NextResponse.json({
+        success: true,
+        signatures: result.confirmedSignatures,
+        totalChunks: result.totalChunks,
+        message: `Position ${positionId} closed successfully (${result.totalChunks} transaction${result.totalChunks > 1 ? "s" : ""})`,
       });
-      signatures.push(signature);
-      console.log(`[Auto-Close] Transaction confirmed: ${signature}`);
     }
 
-    return NextResponse.json({
-      success: true,
-      signatures,
-      message: `Position ${positionId} closed successfully`,
-    });
+    if (result.partialSuccess) {
+      // Some transactions confirmed but not all — position is partially closed
+      logger.warn(
+        `[Auto-Close] Partial close for ${positionId}: ${result.confirmedSignatures.length}/${result.totalChunks} transactions confirmed`
+      );
+      return NextResponse.json(
+        {
+          success: false,
+          partialSuccess: true,
+          confirmedSignatures: result.confirmedSignatures,
+          failedChunks: result.failedChunks,
+          totalChunks: result.totalChunks,
+          error: result.error || `Partial close: ${result.confirmedSignatures.length} of ${result.totalChunks} transactions confirmed`,
+        },
+        { status: 207 } // 207 Multi-Status
+      );
+    }
+
+    // Complete failure
+    return NextResponse.json(
+      {
+        success: false,
+        partialSuccess: false,
+        confirmedSignatures: result.confirmedSignatures,
+        totalChunks: result.totalChunks,
+        error: result.error || "Failed to close position after retries",
+      },
+      { status: 500 }
+    );
   } catch (err) {
-    console.error("[Auto-Close] Error:", err);
+    logger.error("[Auto-Close] Error:", err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Failed to close position" },
       { status: 500 }

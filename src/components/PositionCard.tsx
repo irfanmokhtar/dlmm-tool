@@ -29,7 +29,7 @@ export default function PositionCard({ position }: PositionCardProps) {
     <Link href={`/position/${position.publicKey.toBase58()}`}>
       <Card className="bg-white/[0.03] border-white/[0.06] backdrop-blur-sm hover:bg-white/[0.06] hover:border-white/[0.12] transition-all duration-300 cursor-pointer group shadow-lg hover:shadow-xl overflow-hidden relative">
         <CardContent className="p-5">
-          {/* Header: Token pair name and Icons */}
+          {/* Header: Token pair name, Icons, and PnL */}
           <div className="flex items-start justify-between gap-2 mb-3">
             <div className="flex items-center gap-3 min-w-0">
               <div className="flex -space-x-2 shrink-0">
@@ -55,6 +55,26 @@ export default function PositionCard({ position }: PositionCardProps) {
                 </p>
               </div>
             </div>
+            {position.pnlUsd != null && position.pnlPercent != null && (
+              <div className="text-right shrink-0">
+                <p className={`text-sm font-mono font-semibold ${
+                  Number(position.pnlUsd) >= 0 ? "text-emerald-400" : "text-rose-400"
+                }`}>
+                  {Number(position.pnlUsd) >= 0 ? "+" : ""}
+                  {Number(position.pnlUsd).toLocaleString(undefined, {
+                    style: "currency",
+                    currency: "USD",
+                    maximumFractionDigits: 2,
+                  })}
+                </p>
+                <p className={`text-[10px] font-mono font-medium ${
+                  Number(position.pnlPercent) >= 0 ? "text-emerald-400/70" : "text-rose-400/70"
+                }`}>
+                  {Number(position.pnlPercent) >= 0 ? "+" : ""}
+                  {Number(position.pnlPercent).toFixed(2)}%
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Status Row: AutoClose + Health */}

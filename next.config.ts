@@ -6,6 +6,9 @@ const nextConfig: NextConfig = {
   env: {
     BIGINT_SLOW_NOT_QUICK: "true",
   },
+  logging: {
+    incomingRequests: false, 
+  },
 };
 
 export default nextConfig;

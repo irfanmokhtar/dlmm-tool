@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { getActiveBinForPool } from "@/lib/dlmm";
+import { logger } from "@/lib/logger";
 
 const STORAGE_KEY = "dlmm-auto-close";
 const SETTINGS_KEY = "dlmm-auto-close-settings";
@@ -194,7 +195,7 @@ export function useAutoClose() {
           if (triggerClose) {
             // Trigger auto-close via API
             processingRef.current.add(entry.positionId);
-            console.log(`[Auto-Close] Triggering close for ${entry.positionId}. Reason: ${closeReason}`);
+            logger.info(`[Auto-Close] Triggering close for ${entry.positionId}. Reason: ${closeReason}`);
 
             setState((prev) => ({
               ...prev,
@@ -221,16 +222,40 @@ export function useAutoClose() {
 
               const result = await response.json();
 
-              if (!response.ok) {
+              if (!response.ok && !result.partialSuccess) {
                 throw new Error(result.error || "API request failed");
               }
 
-              console.log(`[Auto-Close] Position ${entry.positionId} closed. Signatures:`, result.signatures);
+              // Handle partial success — some transactions confirmed but not all
+              if (result.partialSuccess) {
+                logger.warn(
+                  `[Auto-Close] Partial close for ${entry.positionId}: ${result.confirmedSignatures?.length || 0}/${result.totalChunks || "?"} transactions confirmed`
+                );
+                addLog(entry.positionId, {
+                  type: "system",
+                  status: "error",
+                  message: `Partial close: ${result.confirmedSignatures?.length || 0} of ${result.totalChunks || "?"} transactions confirmed. Position may need manual retry.`,
+                });
+                // Keep monitoring — don't mark as closed, allow retry
+                setState((prev) => ({
+                  ...prev,
+                  statuses: { ...prev.statuses, [entry.positionId]: "error" },
+                  errors: {
+                    ...prev.errors,
+                    [entry.positionId]: result.error || "Partial close: some transactions failed",
+                  },
+                }));
+                return; // Skip the success path below
+              }
+
+              logger.info(`[Auto-Close] Position ${entry.positionId} closed. Signatures:`, result.signatures);
 
               addLog(entry.positionId, {
                 type: "system",
                 status: "info",
-                message: "Position closed successfully",
+                message: result.totalChunks > 1
+                  ? `Position closed successfully (${result.totalChunks} transactions)`
+                  : "Position closed successfully",
               });
 
               setState((prev) => ({
@@ -241,7 +266,7 @@ export function useAutoClose() {
               // Remove from auto-close list after successful close
               disableAutoClose(entry.positionId);
             } catch (closeErr) {
-              console.error(`Auto-close failed for ${entry.positionId}:`, closeErr);
+              logger.error(`Auto-close failed for ${entry.positionId}:`, closeErr);
               setState((prev) => ({
                 ...prev,
                 statuses: { ...prev.statuses, [entry.positionId]: "error" },
@@ -256,7 +281,7 @@ export function useAutoClose() {
             }
           }
         } catch (pollErr) {
-          console.warn(`Failed to check active bin for ${entry.poolAddress}:`, pollErr);
+          logger.warn(`Failed to check active bin for ${entry.poolAddress}:`, pollErr);
         }
       }
     };

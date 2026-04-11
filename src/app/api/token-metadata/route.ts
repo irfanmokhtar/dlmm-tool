@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
+import { logger } from "@/lib/logger";
 
 const CACHE_DIR = path.join(process.cwd(), "data");
 const CACHE_FILE = path.join(CACHE_DIR, "token-metadata-cache.json");
@@ -55,7 +56,7 @@ export async function GET(req: NextRequest) {
   });
 
   if (missingMints.length === 0) {
-    console.log(`[Proxy] Metadata cache hit for: ${mints}`);
+    logger.debug(`[Proxy] Metadata cache hit for: ${mints}`);
     return NextResponse.json(cachedData);
   }
 
@@ -64,7 +65,7 @@ export async function GET(req: NextRequest) {
   try {
     const query = missingMints.join(",");
     const url = `https://api.jup.ag/tokens/v2/search?query=${query}`;
-    console.log(`[Proxy] Metadata cache miss for: ${query}. Fetching...`);
+    logger.debug(`[Proxy] Metadata cache miss for: ${query}. Fetching...`);
 
     const response = await fetch(url, {
       headers: {
@@ -74,7 +75,7 @@ export async function GET(req: NextRequest) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[Proxy] Jupiter API error: ${response.status} - ${errorText}`);
+      logger.error(`[Proxy] Jupiter API error: ${response.status} - ${errorText}`);
       
       if (cachedData.length > 0) return NextResponse.json(cachedData);
 
@@ -101,9 +102,9 @@ export async function GET(req: NextRequest) {
       // cache a null/placeholder for a shorter time to avoid spamming for things that don't exist
       missingMints.forEach(m => {
         if (!foundIds.has(m)) {
-          console.warn(`[Proxy] Jupiter returned no metadata for: ${m}`);
-          // Cache null with a 1-hour "forget" TTL to stop spamming invalid mints
-          cache[m] = { data: { id: m, symbol: m.slice(0, 4), icon: "" }, timestamp: now + (CACHE_TTL * 6) };
+            logger.warn(`[Proxy] Jupiter returned no metadata for: ${m}`);
+            // Cache null with a 1-hour "forget" TTL to stop spamming invalid mints
+            cache[m] = { data: { id: m, symbol: m.slice(0, 4), icon: "" }, timestamp: now + (CACHE_TTL * 6) };
         }
       });
 
@@ -114,7 +115,7 @@ export async function GET(req: NextRequest) {
     const finalData = [...cachedData, ...newData];
     return NextResponse.json(finalData);
   } catch (error) {
-    console.error("[Proxy] Token metadata fetch failed:", error);
+    logger.error("[Proxy] Token metadata fetch failed:", error);
     if (cachedData.length > 0) return NextResponse.json(cachedData);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

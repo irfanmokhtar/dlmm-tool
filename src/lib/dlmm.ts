@@ -1,7 +1,8 @@
-import { Connection, PublicKey, Transaction } from "@solana/web3.js";
+import { Connection, Keypair, PublicKey, Transaction, sendAndConfirmTransaction } from "@solana/web3.js";
 import DLMM from "@meteora-ag/dlmm";
 import BN from "bn.js";
 import { DLMM_API_BASE } from "./constants";
+import { logger } from "./logger";
 
 // ---------- Cache ----------
 const dlmmCache = new Map<string, Promise<DLMM>>();
@@ -117,7 +118,7 @@ async function getTokenSymbolByMint(connection: Connection, mintAddress: string)
       }
     }
   } catch (err) {
-    console.warn("Failed to fetch token symbol via DAS API:", err);
+    logger.warn("Failed to fetch token symbol via DAS API:", err);
   }
   return undefined;
 }
@@ -148,10 +149,10 @@ async function resolveTokenMetadata(mints: string[]): Promise<void> {
                 });
             }
         } else {
-            console.warn("[TokenMetadata] Proxy fetch failed:", res.status);
+            logger.warn("[TokenMetadata] Proxy fetch failed:", res.status);
         }
     } catch (err) {
-        console.warn("[TokenMetadata] Metadata resolution failed:", err);
+        logger.warn("[TokenMetadata] Metadata resolution failed:", err);
     }
 }
 
@@ -293,13 +294,13 @@ export async function getUserPositions(
           });
         }
       } catch (poolErr) {
-        console.error(`Error fetching pool ${poolAddress}:`, poolErr);
+        logger.error(`Error fetching pool ${poolAddress}:`, poolErr);
       }
     }
 
     return userPositions;
   } catch (err) {
-    console.error("Failed to fetch user positions:", err);
+    logger.error("Failed to fetch user positions:", err);
     throw err;
   }
 }
@@ -350,7 +351,7 @@ export async function fetchMeteoraPositionPnl(
     const response = await fetch(`/api/meteora-pnl?${query.toString()}`);
     if (!response.ok) {
       const errorBody = await response.text();
-      console.warn("[Meteora PnL] fetch failed", response.status, errorBody);
+      logger.warn("[Meteora PnL] fetch failed", response.status, errorBody);
       return {};
     }
 
@@ -378,7 +379,7 @@ export async function fetchMeteoraPositionPnl(
 
     return map;
   } catch (err) {
-    console.warn("[Meteora PnL] error fetching PnL", err);
+    logger.warn("[Meteora PnL] error fetching PnL", err);
     return {};
   }
 }
@@ -419,4 +420,176 @@ export async function closePosition(
   });
 
   return transactions;
+}
+
+/**
+ * Result of a close position attempt, which may be partial.
+ */
+export interface ClosePositionResult {
+  /** Whether all transactions were confirmed successfully */
+  success: boolean;
+  /** Whether some (but not all) transactions were confirmed */
+  partialSuccess: boolean;
+  /** Signatures of confirmed transactions */
+  confirmedSignatures: string[];
+  /** Number of transaction chunks that failed */
+  failedChunks: number;
+  /** Total number of transaction chunks */
+  totalChunks: number;
+  /** Error message if any */
+  error?: string;
+}
+
+const MAX_CLOSE_RETRIES = 3;
+
+/**
+ * Close a position with atomic transaction sending and retry logic.
+ *
+ * For positions spanning >70 bins, the SDK returns multiple transactions.
+ * This function sends all transactions atomically (one blockhash, send all,
+ * then confirm all) and retries failed chunks up to MAX_CLOSE_RETRIES times.
+ */
+export async function closePositionWithRetry(
+  connection: Connection,
+  keypair: Keypair,
+  poolAddress: string,
+  positionPubKey: PublicKey,
+  lowerBinId: number,
+  upperBinId: number
+): Promise<ClosePositionResult> {
+  const userPubKey = keypair.publicKey;
+  const result: ClosePositionResult = {
+    success: false,
+    partialSuccess: false,
+    confirmedSignatures: [],
+    failedChunks: 0,
+    totalChunks: 0,
+  };
+
+  let currentLowerBin = lowerBinId;
+  let attempt = 0;
+
+  while (currentLowerBin <= upperBinId && attempt < MAX_CLOSE_RETRIES) {
+    attempt++;
+    logger.info(
+      `[ClosePosition] Attempt ${attempt}: closing bins ${currentLowerBin}-${upperBinId} for position ${positionPubKey.toBase58()}`
+    );
+
+    try {
+      const transactions = await closePosition(
+        connection,
+        userPubKey,
+        poolAddress,
+        positionPubKey,
+        currentLowerBin,
+        upperBinId
+      );
+
+      result.totalChunks = transactions.length;
+
+      if (transactions.length === 0) {
+        logger.info("[ClosePosition] No transactions returned — position may already be closed");
+        result.success = true;
+        return result;
+      }
+
+      // Strategy: send all transactions atomically using a single blockhash,
+      // then confirm them all. This prevents state-change failures between
+      // sequential confirms.
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+
+      // Sign all transactions with the same blockhash
+      for (const tx of transactions) {
+        tx.feePayer = userPubKey;
+        tx.recentBlockhash = blockhash;
+        tx.sign(keypair);
+      }
+
+      // Send all transactions without waiting for confirmation
+      const sentSignatures: string[] = [];
+      for (let i = 0; i < transactions.length; i++) {
+        const tx = transactions[i];
+        const rawTx = tx.serialize();
+        const signature = await connection.sendRawTransaction(rawTx, {
+          skipPreflight: false,
+          preflightCommitment: "confirmed",
+        });
+        sentSignatures.push(signature);
+        logger.info(`[ClosePosition] Sent transaction ${i + 1}/${transactions.length}: ${signature}`);
+      }
+
+      // Confirm all transactions
+      let confirmedCount = 0;
+      let failedCount = 0;
+      for (let i = 0; i < sentSignatures.length; i++) {
+        try {
+          const confirmation = await connection.confirmTransaction(
+            { signature: sentSignatures[i], blockhash, lastValidBlockHeight },
+            "confirmed"
+          );
+          if (confirmation.value.err) {
+            logger.warn(
+              `[ClosePosition] Transaction ${sentSignatures[i]} confirmed with error: ${JSON.stringify(confirmation.value.err)}`
+            );
+            failedCount++;
+          } else {
+            confirmedCount++;
+            result.confirmedSignatures.push(sentSignatures[i]);
+            logger.info(`[ClosePosition] Confirmed transaction ${sentSignatures[i]}`);
+          }
+        } catch (confirmErr) {
+          logger.warn(`[ClosePosition] Failed to confirm transaction ${sentSignatures[i]}:`, confirmErr);
+          failedCount++;
+        }
+      }
+
+      logger.info(
+        `[ClosePosition] Attempt ${attempt}: ${confirmedCount}/${transactions.length} transactions confirmed`
+      );
+
+      if (failedCount === 0) {
+        // All transactions confirmed — success!
+        result.success = true;
+        result.partialSuccess = false;
+        result.failedChunks = 0;
+        return result;
+      }
+
+      // Some transactions failed — calculate remaining bin range
+      // Each confirmed transaction covers up to 70 bins (DEFAULT_BIN_PER_POSITION)
+      const BIN_PER_CHUNK = 70;
+      const confirmedBins = confirmedCount * BIN_PER_CHUNK;
+      currentLowerBin = Math.min(currentLowerBin + confirmedBins, upperBinId + 1);
+      result.failedChunks = failedCount;
+      result.partialSuccess = confirmedCount > 0;
+
+      // If no transactions confirmed at all, retry the whole range
+      if (confirmedCount === 0) {
+        logger.warn(`[ClosePosition] No transactions confirmed on attempt ${attempt}, retrying...`);
+        continue;
+      }
+
+      // Some confirmed — retry remaining range
+      logger.info(
+        `[ClosePosition] Partial success: ${confirmedCount} confirmed, retrying bins ${currentLowerBin}-${upperBinId}`
+      );
+    } catch (err) {
+      logger.error(`[ClosePosition] Error on attempt ${attempt}:`, err);
+      result.error = err instanceof Error ? err.message : String(err);
+
+      if (attempt >= MAX_CLOSE_RETRIES) {
+        break;
+      }
+      // Brief delay before retry
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+  }
+
+  // If we get here, we either succeeded partially or exhausted retries
+  if (result.confirmedSignatures.length > 0) {
+    result.partialSuccess = true;
+    result.success = false;
+  }
+
+  return result;
 }

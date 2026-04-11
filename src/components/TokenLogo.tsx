@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { cn } from "@/lib/utils";
+import { logger } from "@/lib/logger";
 
 interface TokenLogoProps {
   src?: string;
@@ -22,23 +23,22 @@ export default function TokenLogo({ src, symbol, className, backgroundColor }: T
           src={src}
           alt={symbol}
           className="relative w-full h-full rounded-full object-cover"
-          onError={(e) => {
-            console.warn(`[TokenLogo] Failed to load logo for ${symbol} from ${src}`);
+          onError={() => {
+            logger.warn(`[TokenLogo] Failed to load logo for ${symbol} from ${src}`);
             setError(true);
           }}
-          onLoad={() => console.log(`[TokenLogo] Successfully loaded logo for ${symbol}`)}
+          onLoad={() => logger.debug(`[TokenLogo] Successfully loaded logo for ${symbol}`)}
         />
       </div>
     );
   }
 
   if (src && error) {
-    console.log(`[TokenLogo] Showing fallback for ${symbol} due to load error`);
+    logger.debug(`[TokenLogo] Showing fallback for ${symbol} due to load error`);
   } else if (!src) {
-    console.log(`[TokenLogo] No src provided for ${symbol}, showing fallback`);
+    logger.debug(`[TokenLogo] No src provided for ${symbol}, showing fallback`);
   }
 
-  // Fallback to colored circle with initials
   return (
     <div
       className={cn(

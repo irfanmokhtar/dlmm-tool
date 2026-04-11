@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { getUserPositions, UserPosition } from "@/lib/dlmm";
+import { logger } from "@/lib/logger";
 
 const SETTINGS_KEY = "dlmm-position-refresh-settings";
 const DEFAULT_REFRESH_INTERVAL = 60_000; // 60 seconds
@@ -63,7 +64,7 @@ export default function PositionProvider({ children }: { children: React.ReactNo
       const userPositions = await getUserPositions(connection, publicKey);
       setPositions(userPositions);
     } catch (err) {
-      console.error("Error fetching positions:", err);
+      logger.error("Error fetching positions:", err);
       if (positions.length === 0) {
         setError(err instanceof Error ? err.message : "Failed to fetch positions");
       }
