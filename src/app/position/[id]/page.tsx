@@ -170,6 +170,7 @@ export default function PositionDetailPage() {
                   <span className="text-zinc-600 mx-1">→</span>
                   <span className="text-teal-400">{position.positionData.upperBinId}</span>
                 </span>
+                <span className="text-zinc-600">({position.positionData.upperBinId - position.positionData.lowerBinId + 1} bins)</span>
               </div>
             </div>
           </div>
