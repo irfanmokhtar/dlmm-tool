@@ -17,6 +17,7 @@ import AutoCloseLogs from "@/components/AutoCloseLogs";
 import { useAutoCloseContext } from "@/components/AutoCloseMonitor";
 import { usePositionData } from "@/components/PositionProvider";
 import TokenLogo from "@/components/TokenLogo";
+import PositionOverview from "@/components/PositionOverview";
 import { formatCompactDecimal } from "@/lib/format";
 import RefreshSettings from "@/components/RefreshSettings";
 
@@ -146,97 +147,7 @@ export default function PositionDetailPage() {
         </div>
       </div>
 
-
-      {/* Fees & Token Balances */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Fees */}
-        <Card className="bg-white/[0.03] border-white/[0.06] backdrop-blur-sm">
-          <CardContent className="p-5">
-            <h3 className="text-sm font-semibold text-foreground mb-4">
-              Unclaimed Fees & Rewards
-            </h3>
-            {hasFees ? (
-              <div className="space-y-3">
-                {parseFloat(position.positionData.feeX) > 0 && (
-                  <div className="flex justify-between items-center px-3 py-2 rounded-lg bg-emerald-500/5 border border-emerald-500/10">
-                    <div className="flex items-center gap-2">
-                      <TokenLogo
-                        src={position.tokenX.logoURI}
-                        symbol={position.tokenX.symbol}
-                        className="w-4 h-4 text-xs"
-                        backgroundColor="#8b5cf6"
-                      />
-                      <span className="text-sm text-emerald-400">
-                        {position.tokenX.symbol} Fees
-                      </span>
-                    </div>
-                    <span className="font-mono text-sm font-semibold text-emerald-400">
-                      {formatCompactDecimal(position.positionData.feeX)}
-                    </span>
-                  </div>
-                )}
-                {parseFloat(position.positionData.feeY) > 0 && (
-                  <div className="flex justify-between items-center px-3 py-2 rounded-lg bg-emerald-500/5 border border-emerald-500/10">
-                    <div className="flex items-center gap-2">
-                      <TokenLogo
-                        src={position.tokenY.logoURI}
-                        symbol={position.tokenY.symbol}
-                        className="w-4 h-4 text-xs"
-                        backgroundColor="#14b8a6"
-                      />
-                      <span className="text-sm text-emerald-400">
-                        {position.tokenY.symbol} Fees
-                      </span>
-                    </div>
-                    <span className="font-mono text-sm font-semibold text-emerald-400">
-                      {formatCompactDecimal(position.positionData.feeY)}
-                    </span>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                No unclaimed fees at this time.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Token Balances */}
-        <Card className="bg-white/[0.03] border-white/[0.06] backdrop-blur-sm">
-          <CardContent className="p-5 space-y-3">
-            <p className="text-xs text-muted-foreground">Token Balances</p>
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <TokenLogo
-                  src={position.tokenX.logoURI}
-                  symbol={position.tokenX.symbol}
-                  className="w-5 h-5 text-xs"
-                  backgroundColor="#8b5cf6"
-                />
-                <span className="text-sm font-medium">{position.tokenX.symbol}</span>
-              </div>
-              <span className="font-mono font-semibold text-sm">
-                {formatCompactDecimal(position.positionData.totalXAmount)}
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <TokenLogo
-                  src={position.tokenY.logoURI}
-                  symbol={position.tokenY.symbol}
-                  className="w-5 h-5 text-xs"
-                  backgroundColor="#14b8a6"
-                />
-                <span className="text-sm font-medium">{position.tokenY.symbol}</span>
-              </div>
-              <span className="font-mono font-semibold text-sm">
-                {formatCompactDecimal(position.positionData.totalYAmount)}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <PositionOverview position={position} />
 
       {/* Bin Distribution Chart */}
       <Card className="bg-white/[0.03] border-white/[0.06] backdrop-blur-sm">

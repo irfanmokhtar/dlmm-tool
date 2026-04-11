@@ -67,6 +67,22 @@ export interface UserPosition {
   activeBinPrice: string;
   tokenX: { symbol: string; mint: string; decimals: number; logoURI?: string };
   tokenY: { symbol: string; mint: string; decimals: number; logoURI?: string };
+  pnlUsd?: string;
+  pnlPercent?: string;
+  tokenXPrice?: string;
+  tokenYPrice?: string;
+  poolActivePrice?: string;
+  isClosed?: boolean;
+}
+
+export interface PositionPnlInfo {
+  positionAddress: string;
+  pnlUsd: string;
+  pnlPctChange: string;
+  tokenXPrice?: string;
+  tokenYPrice?: string;
+  poolActivePrice?: string;
+  isClosed?: boolean;
 }
 
 // ---------- API Functions ----------
@@ -185,6 +201,15 @@ export async function getUserPositions(
         const metadataX = tokenMetadataCache.get(mintX);
         const metadataY = tokenMetadataCache.get(mintY);
 
+        // Fetch PnL data from Meteora data API for this pool
+        const pnlMap = await fetchMeteoraPositionPnl(
+          poolAddress,
+          walletPubKey.toBase58(),
+          "all",
+          1,
+          100
+        );
+
         const symbolXJup = metadataX?.symbol || await getTokenSymbolByMint(connection, mintX);
         const symbolYJup = metadataY?.symbol || await getTokenSymbolByMint(connection, mintY);
         
@@ -213,6 +238,8 @@ export async function getUserPositions(
               totalYAmount += parseFloat(y.toString());
             }
           }
+
+          const pnlData = pnlMap[position.publicKey.toBase58()];
 
           userPositions.push({
             publicKey: position.publicKey,
@@ -257,6 +284,12 @@ export async function getUserPositions(
               decimals: decimalsY,
               logoURI: metadataY?.logoURI
             },
+            pnlUsd: pnlData?.pnlUsd,
+            pnlPercent: pnlData?.pnlPctChange,
+            tokenXPrice: pnlData?.tokenXPrice,
+            tokenYPrice: pnlData?.tokenYPrice,
+            poolActivePrice: pnlData?.poolActivePrice,
+            isClosed: pnlData?.isClosed,
           });
         }
       } catch (poolErr) {
@@ -296,6 +329,58 @@ export function calculatePositionHealth(
   if (score >= 60) return { score, status: "healthy" };
   if (score >= 30) return { score, status: "warning" };
   return { score, status: "critical" };
+}
+
+export async function fetchMeteoraPositionPnl(
+  poolAddress: string,
+  userAddress: string,
+  status: "all" | "open" | "closed" = "all",
+  page = 1,
+  pageSize = 100
+): Promise<Record<string, PositionPnlInfo>> {
+  try {
+    const query = new URLSearchParams({
+      poolAddress,
+      user: userAddress,
+      status,
+      page: String(page),
+      page_size: String(pageSize),
+    });
+
+    const response = await fetch(`/api/meteora-pnl?${query.toString()}`);
+    if (!response.ok) {
+      const errorBody = await response.text();
+      console.warn("[Meteora PnL] fetch failed", response.status, errorBody);
+      return {};
+    }
+
+    const data = await response.json();
+    if (!data?.positions || !Array.isArray(data.positions)) {
+      return {};
+    }
+
+    const map: Record<string, PositionPnlInfo> = {};
+    for (const pos of data.positions) {
+      const positionAddress =
+        pos.positionAddress || pos.position_address || pos.position_address;
+      if (!positionAddress) continue;
+
+      map[positionAddress] = {
+        positionAddress,
+        pnlUsd: String(pos.pnlUsd ?? pos.pnl_usd ?? "0"),
+        pnlPctChange: String(pos.pnlPctChange ?? pos.pnl_pct_change ?? "0"),
+        tokenXPrice: pos.tokenXPrice || pos.token_x_price,
+        tokenYPrice: pos.tokenYPrice || pos.token_y_price,
+        poolActivePrice: pos.poolActivePrice || pos.pool_active_price,
+        isClosed: pos.isClosed ?? pos.is_closed,
+      };
+    }
+
+    return map;
+  } catch (err) {
+    console.warn("[Meteora PnL] error fetching PnL", err);
+    return {};
+  }
 }
 
 /**

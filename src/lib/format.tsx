@@ -1,8 +1,10 @@
+import type { ReactNode } from "react";
+
 /**
  * Formats a number with subscript for leading zeros if there are 4 or more zeros after the decimal.
  * Example: 0.000000144 -> 0.0₆144
  */
-export function formatCompactDecimal(value: number | string, maxDecimals = 10): string | JSX.Element {
+export function formatCompactDecimal(value: number | string, maxDecimals = 10): string | ReactNode {
   const num = typeof value === "string" ? parseFloat(value) : value;
   if (isNaN(num) || num === 0) return "0";
   if (num >= 0.0001) return num.toLocaleString(undefined, { maximumFractionDigits: maxDecimals });
