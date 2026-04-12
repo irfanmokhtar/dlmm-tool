@@ -3,7 +3,8 @@
 import { useParams, useRouter } from "next/navigation";
 import { useState, useMemo } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { calculatePositionHealth } from "@/lib/dlmm";
+import { useConnection } from "@solana/wallet-adapter-react";
+import { calculatePositionHealth, claimSwapFee } from "@/lib/dlmm";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -12,6 +13,7 @@ import BinChart from "@/components/BinChart";
 import PositionHealth from "@/components/PositionHealth";
 import AutoCloseToggle from "@/components/AutoCloseToggle";
 import AutoCloseLogs from "@/components/AutoCloseLogs";
+import PositionActivityCard from "@/components/PositionActivity";
 import { useAutoCloseContext } from "@/components/AutoCloseMonitor";
 import { usePositionData } from "@/components/PositionProvider";
 import TokenLogo from "@/components/TokenLogo";
@@ -24,7 +26,8 @@ import { logger } from "@/lib/logger";
 export default function PositionDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { publicKey } = useWallet();
+  const { publicKey, sendTransaction } = useWallet();
+  const { connection } = useConnection();
   const { positions, loading, error: dataError } = usePositionData();
 
   const positionId = params.id as string;
@@ -33,6 +36,10 @@ export default function PositionDetailPage() {
   const [withdrawing, setWithdrawing] = useState(false);
   const [withdrawError, setWithdrawError] = useState<string | null>(null);
   const [withdrawSuccess, setWithdrawSuccess] = useState(false);
+
+  const [claiming, setClaiming] = useState(false);
+  const [claimError, setClaimError] = useState<string | null>(null);
+  const [claimSuccess, setClaimSuccess] = useState(false);
 
   const position = useMemo(
     () => positions.find((p) => p.publicKey.toBase58() === positionId),
@@ -107,6 +114,54 @@ export default function PositionDetailPage() {
       setWithdrawError(err instanceof Error ? err.message : "Failed to withdraw liquidity");
     } finally {
       setWithdrawing(false);
+    }
+  };
+
+  const handleClaimFees = async () => {
+    if (!position || !publicKey) return;
+
+    setClaiming(true);
+    setClaimError(null);
+    setClaimSuccess(false);
+
+    console.info(
+      `[ClaimFees] Claiming swap fees for position ${position.publicKey.toBase58()}`
+    );
+
+    try {
+      const transactions = await claimSwapFee(
+        connection,
+        publicKey,
+        position.poolAddress,
+        position.publicKey
+      );
+
+      if (transactions.length === 0) {
+        console.info("[ClaimFees] No transactions returned — no fees to claim");
+        setClaimError("No fees to claim");
+        setClaiming(false);
+        return;
+      }
+
+      console.info(`[ClaimFees] Built ${transactions.length} transaction(s), signing with wallet...`);
+
+      for (let i = 0; i < transactions.length; i++) {
+        const tx = transactions[i];
+        const signature = await sendTransaction(tx, connection);
+        console.info(
+          `[ClaimFees] Transaction ${i + 1}/${transactions.length} sent: https://solscan.io/tx/${signature}`
+        );
+        await connection.confirmTransaction(signature, "confirmed");
+      }
+
+      console.info("[ClaimFees] ✅ All fee claim transactions confirmed");
+      setClaimSuccess(true);
+      setTimeout(() => setClaimSuccess(false), 3000);
+    } catch (err) {
+      console.error("[ClaimFees] ❌ Error:", err);
+      setClaimError(err instanceof Error ? err.message : "Failed to claim fees");
+    } finally {
+      setClaiming(false);
     }
   };
 
@@ -282,10 +337,18 @@ export default function PositionDetailPage() {
 
             <Button
               className="w-full bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white shadow-lg shadow-emerald-500/10"
-              disabled={!hasFees}
+              disabled={!hasFees || claiming}
+              onClick={handleClaimFees}
             >
-              Claim All Fees
+              {claiming
+                ? "Claiming Fees..."
+                : claimSuccess
+                ? "✓ Fees Claimed!"
+                : "Claim All Fees"}
             </Button>
+            {claimError && (
+              <p className="text-xs text-rose-400 mt-1">{claimError}</p>
+            )}
             <Button
               variant="outline"
               className="w-full border-rose-500/20 text-rose-400 hover:bg-rose-500/10"
@@ -308,6 +371,9 @@ export default function PositionDetailPage() {
           </p>
         </CardContent>
       </Card>
+
+      {/* Position Activity */}
+      <PositionActivityCard positionId={positionId} />
 
       {/* Monitoring Logs */}
       <AutoCloseLogs positionId={positionId} />

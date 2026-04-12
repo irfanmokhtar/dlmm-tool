@@ -423,6 +423,33 @@ export async function closePosition(
 }
 
 /**
+ * Claim swap fees for a position.
+ * Returns Transaction[] that need to be signed and sent by the wallet.
+ */
+export async function claimSwapFee(
+  connection: Connection,
+  userPubKey: PublicKey,
+  poolAddress: string,
+  positionPubKey: PublicKey
+): Promise<Transaction[]> {
+  const dlmmPool = await getOrCreateDlmmPool(connection, poolAddress);
+
+  // Fetch the position account to get the full LbPosition data
+  const positionState = await dlmmPool.getPosition(positionPubKey);
+
+  const transactions = await dlmmPool.claimSwapFee({
+    owner: userPubKey,
+    position: {
+      publicKey: positionPubKey,
+      positionData: positionState.positionData,
+      version: positionState.version,
+    },
+  });
+
+  return transactions;
+}
+
+/**
  * Result of a close position attempt, which may be partial.
  */
 export interface ClosePositionResult {
