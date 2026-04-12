@@ -471,8 +471,9 @@ export async function closePositionWithRetry(
 
   while (currentLowerBin <= upperBinId && attempt < MAX_CLOSE_RETRIES) {
     attempt++;
-    logger.info(
-      `[ClosePosition] Attempt ${attempt}: closing bins ${currentLowerBin}-${upperBinId} for position ${positionPubKey.toBase58()}`
+    const remainingBins = upperBinId - currentLowerBin + 1;
+    console.info(
+      `[ClosePosition] Attempt ${attempt}/${MAX_CLOSE_RETRIES}: closing bins ${currentLowerBin} → ${upperBinId} (${remainingBins} bins remaining) for position ${positionPubKey.toBase58()}`
     );
 
     try {
@@ -488,15 +489,20 @@ export async function closePositionWithRetry(
       result.totalChunks = transactions.length;
 
       if (transactions.length === 0) {
-        logger.info("[ClosePosition] No transactions returned — position may already be closed");
+        console.info("[ClosePosition] No transactions returned — position may already be closed");
         result.success = true;
         return result;
       }
+
+      console.info(
+        `[ClosePosition] Built ${transactions.length} transaction${transactions.length > 1 ? "s" : ""} for ${remainingBins} bins`
+      );
 
       // Strategy: send all transactions atomically using a single blockhash,
       // then confirm them all. This prevents state-change failures between
       // sequential confirms.
       const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+      console.info(`[ClosePosition] Using blockhash: ${blockhash.slice(0, 20)}... (valid until block ${lastValidBlockHeight})`);
 
       // Sign all transactions with the same blockhash
       for (const tx of transactions) {
@@ -515,7 +521,10 @@ export async function closePositionWithRetry(
           preflightCommitment: "confirmed",
         });
         sentSignatures.push(signature);
-        logger.info(`[ClosePosition] Sent transaction ${i + 1}/${transactions.length}: ${signature}`);
+        console.info(
+          `[ClosePosition] Sent tx ${i + 1}/${transactions.length}: ${signature}\n` +
+          `  Solscan: https://solscan.io/tx/${signature}`
+        );
       }
 
       // Confirm all transactions
@@ -528,27 +537,33 @@ export async function closePositionWithRetry(
             "confirmed"
           );
           if (confirmation.value.err) {
-            logger.warn(
-              `[ClosePosition] Transaction ${sentSignatures[i]} confirmed with error: ${JSON.stringify(confirmation.value.err)}`
+            console.warn(
+              `[ClosePosition] ⚠️ Tx ${sentSignatures[i]} confirmed with error: ${JSON.stringify(confirmation.value.err)}`
             );
             failedCount++;
           } else {
             confirmedCount++;
             result.confirmedSignatures.push(sentSignatures[i]);
-            logger.info(`[ClosePosition] Confirmed transaction ${sentSignatures[i]}`);
+            console.info(
+              `[ClosePosition] ✅ Confirmed tx ${i + 1}/${sentSignatures.length}: ${sentSignatures[i]}\n` +
+              `  Solscan: https://solscan.io/tx/${sentSignatures[i]}`
+            );
           }
         } catch (confirmErr) {
-          logger.warn(`[ClosePosition] Failed to confirm transaction ${sentSignatures[i]}:`, confirmErr);
+          console.warn(`[ClosePosition] ⚠️ Failed to confirm tx ${sentSignatures[i]}:`, confirmErr);
           failedCount++;
         }
       }
 
-      logger.info(
-        `[ClosePosition] Attempt ${attempt}: ${confirmedCount}/${transactions.length} transactions confirmed`
+      console.info(
+        `[ClosePosition] Attempt ${attempt} result: ${confirmedCount}/${transactions.length} transactions confirmed, ${failedCount} failed`
       );
 
       if (failedCount === 0) {
         // All transactions confirmed — success!
+        console.info(
+          `[ClosePosition] ✅ All ${confirmedCount} transaction(s) confirmed for position ${positionPubKey.toBase58()}`
+        );
         result.success = true;
         result.partialSuccess = false;
         result.failedChunks = 0;
@@ -565,21 +580,23 @@ export async function closePositionWithRetry(
 
       // If no transactions confirmed at all, retry the whole range
       if (confirmedCount === 0) {
-        logger.warn(`[ClosePosition] No transactions confirmed on attempt ${attempt}, retrying...`);
+        console.warn(`[ClosePosition] No transactions confirmed on attempt ${attempt}, retrying...`);
         continue;
       }
 
       // Some confirmed — retry remaining range
-      logger.info(
-        `[ClosePosition] Partial success: ${confirmedCount} confirmed, retrying bins ${currentLowerBin}-${upperBinId}`
+      console.info(
+        `[ClosePosition] Partial success: ${confirmedCount} confirmed, retrying remaining bins ${currentLowerBin} → ${upperBinId}`
       );
     } catch (err) {
-      logger.error(`[ClosePosition] Error on attempt ${attempt}:`, err);
+      console.error(`[ClosePosition] ❌ Error on attempt ${attempt}:`, err);
       result.error = err instanceof Error ? err.message : String(err);
 
       if (attempt >= MAX_CLOSE_RETRIES) {
+        console.error(`[ClosePosition] Exhausted all ${MAX_CLOSE_RETRIES} retries`);
         break;
       }
+      console.info(`[ClosePosition] Retrying in 2s...`);
       // Brief delay before retry
       await new Promise((resolve) => setTimeout(resolve, 2000));
     }
@@ -589,6 +606,11 @@ export async function closePositionWithRetry(
   if (result.confirmedSignatures.length > 0) {
     result.partialSuccess = true;
     result.success = false;
+    console.warn(
+      `[ClosePosition] ⚠️ Partial close for ${positionPubKey.toBase58()}: ${result.confirmedSignatures.length} tx(s) confirmed, ${result.failedChunks} chunk(s) failed`
+    );
+  } else {
+    console.error(`[ClosePosition] ❌ Failed to close position ${positionPubKey.toBase58()} after ${MAX_CLOSE_RETRIES} attempts`);
   }
 
   return result;

@@ -7,7 +7,7 @@ const nextConfig: NextConfig = {
     BIGINT_SLOW_NOT_QUICK: "true",
   },
   logging: {
-    incomingRequests: false, 
+    incomingRequests: process.env.NEXT_REQUEST_LOG === "true",
   },
 };
 

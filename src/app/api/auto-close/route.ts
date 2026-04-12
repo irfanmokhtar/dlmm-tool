@@ -59,7 +59,15 @@ export async function POST(request: NextRequest) {
 
     const connection = new Connection(rpcUrl, "confirmed");
 
-    logger.info(`[Auto-Close] Closing position ${positionId} for wallet ${keypair.publicKey.toBase58()}`);
+    const binCount = upperBinId - lowerBinId + 1;
+    console.info(
+      `[Auto-Close] Initiating close:\n` +
+      `  Position: ${positionId}\n` +
+      `  Pool: ${poolAddress}\n` +
+      `  Wallet: ${keypair.publicKey.toBase58()}\n` +
+      `  Bin Range: ${lowerBinId} → ${upperBinId} (${binCount} bins)\n` +
+      `  Multi-tx expected: ${binCount > 70 ? "YES" : "NO"} (${Math.ceil(binCount / 70)} chunk${Math.ceil(binCount / 70) > 1 ? "s" : ""})`
+    );
 
     // Use atomic transaction sending with retry logic
     const result = await closePositionWithRetry(
@@ -72,6 +80,13 @@ export async function POST(request: NextRequest) {
     );
 
     if (result.success) {
+      console.info(
+        `[Auto-Close] ✅ Position closed successfully:\n` +
+        `  Position: ${positionId}\n` +
+        `  Transactions: ${result.totalChunks}\n` +
+        `  Signatures:\n` +
+        result.confirmedSignatures.map((s) => `    • ${s} (https://solscan.io/tx/${s})`).join("\n")
+      );
       return NextResponse.json({
         success: true,
         signatures: result.confirmedSignatures,
@@ -81,9 +96,13 @@ export async function POST(request: NextRequest) {
     }
 
     if (result.partialSuccess) {
-      // Some transactions confirmed but not all — position is partially closed
-      logger.warn(
-        `[Auto-Close] Partial close for ${positionId}: ${result.confirmedSignatures.length}/${result.totalChunks} transactions confirmed`
+      console.warn(
+        `[Auto-Close] ⚠️ Partial close for ${positionId}:\n` +
+        `  Confirmed: ${result.confirmedSignatures.length}/${result.totalChunks} transactions\n` +
+        `  Failed chunks: ${result.failedChunks}\n` +
+        `  Confirmed signatures:\n` +
+        result.confirmedSignatures.map((s) => `    • ${s} (https://solscan.io/tx/${s})`).join("\n") +
+        `\n  Error: ${result.error || "Unknown"}`
       );
       return NextResponse.json(
         {
@@ -99,6 +118,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Complete failure
+    console.error(
+      `[Auto-Close] ❌ Failed to close position ${positionId}:\n` +
+      `  Total chunks: ${result.totalChunks}\n` +
+      `  Confirmed: ${result.confirmedSignatures.length}\n` +
+      `  Error: ${result.error || "Failed to close position after retries"}`
+    );
     return NextResponse.json(
       {
         success: false,
@@ -110,6 +135,7 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   } catch (err) {
+    console.error(`[Auto-Close] ❌ Unexpected error:`, err);
     logger.error("[Auto-Close] Error:", err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Failed to close position" },

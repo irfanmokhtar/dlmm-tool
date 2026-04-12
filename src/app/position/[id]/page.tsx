@@ -1,13 +1,11 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState, useCallback, useMemo } from "react";
-import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { PublicKey } from "@solana/web3.js";
-import { calculatePositionHealth, UserPosition } from "@/lib/dlmm";
+import { useState, useMemo } from "react";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { calculatePositionHealth } from "@/lib/dlmm";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import BinChart from "@/components/BinChart";
@@ -20,22 +18,97 @@ import TokenLogo from "@/components/TokenLogo";
 import PositionOverview from "@/components/PositionOverview";
 import { formatCompactDecimal } from "@/lib/format";
 import RefreshSettings from "@/components/RefreshSettings";
+import { logger } from "@/lib/logger";
 
 
 export default function PositionDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { connection } = useConnection();
   const { publicKey } = useWallet();
   const { positions, loading, error: dataError } = usePositionData();
 
   const positionId = params.id as string;
   const autoClose = useAutoCloseContext();
 
+  const [withdrawing, setWithdrawing] = useState(false);
+  const [withdrawError, setWithdrawError] = useState<string | null>(null);
+  const [withdrawSuccess, setWithdrawSuccess] = useState(false);
+
   const position = useMemo(
     () => positions.find((p) => p.publicKey.toBase58() === positionId),
     [positions, positionId]
   );
+
+  const handleWithdrawAll = async () => {
+    if (!position) return;
+
+    setWithdrawing(true);
+    setWithdrawError(null);
+    setWithdrawSuccess(false);
+
+    const binCount = position.positionData.upperBinId - position.positionData.lowerBinId + 1;
+    console.info(
+      `[Withdraw] Initiating close position:\n` +
+      `  Position: ${position.publicKey.toBase58()}\n` +
+      `  Pool: ${position.poolAddress}\n` +
+      `  Bin Range: ${position.positionData.lowerBinId} → ${position.positionData.upperBinId} (${binCount} bins)\n` +
+      `  Multi-tx expected: ${binCount > 70 ? "YES" : "NO"}\n` +
+      `  Sending to /api/auto-close for server-side signing...`
+    );
+
+    try {
+      const response = await fetch("/api/auto-close", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          positionId: position.publicKey.toBase58(),
+          poolAddress: position.poolAddress,
+          lowerBinId: position.positionData.lowerBinId,
+          upperBinId: position.positionData.upperBinId,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok && !result.partialSuccess) {
+        console.error(`[Withdraw] ❌ Close failed: ${result.error}`);
+        throw new Error(result.error || "Failed to close position");
+      }
+
+      if (result.partialSuccess) {
+        console.warn(
+          `[Withdraw] ⚠️ Partial close:\n` +
+          `  Confirmed: ${result.confirmedSignatures?.length || 0}/${result.totalChunks || "?"} transactions\n` +
+          `  Confirmed signatures:\n` +
+          (result.confirmedSignatures || []).map((s: string) => `    • ${s} (https://solscan.io/tx/${s})`).join("\n") +
+          `\n  Error: ${result.error || "Unknown"}`
+        );
+        setWithdrawError(
+          result.error || `Partial close: ${result.confirmedSignatures?.length || 0} of ${result.totalChunks || "?"} transactions confirmed. Position may need manual retry.`
+        );
+        setWithdrawing(false);
+        return;
+      }
+
+      console.info(
+        `[Withdraw] ✅ Position closed successfully:\n` +
+        `  Transactions: ${result.totalChunks}\n` +
+        `  Signatures:\n` +
+        (result.signatures || []).map((s: string) => `    • ${s} (https://solscan.io/tx/${s})`).join("\n")
+      );
+      setWithdrawSuccess(true);
+
+      // Refresh positions after a short delay
+      setTimeout(() => {
+        router.push("/");
+      }, 2000);
+    } catch (err) {
+      console.error("[Withdraw] ❌ Error:", err);
+      setWithdrawError(err instanceof Error ? err.message : "Failed to withdraw liquidity");
+    } finally {
+      setWithdrawing(false);
+    }
+  };
 
   const error = dataError || (!loading && !position ? "Position not found" : null);
 
@@ -214,9 +287,18 @@ export default function PositionDetailPage() {
             <Button
               variant="outline"
               className="w-full border-rose-500/20 text-rose-400 hover:bg-rose-500/10"
+              onClick={handleWithdrawAll}
+              disabled={withdrawing || withdrawSuccess}
             >
-              Withdraw All Liquidity
+              {withdrawing
+                ? "Signing Transaction..."
+                : withdrawSuccess
+                ? "✓ Position Closed — Redirecting..."
+                : "Withdraw All Liquidity"}
             </Button>
+            {withdrawError && (
+              <p className="text-xs text-rose-400 mt-1">{withdrawError}</p>
+            )}
           </div>
           <p className="text-[10px] text-muted-foreground mt-3">
             Actions execute on-chain transactions. You'll be asked to sign
