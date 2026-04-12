@@ -39,7 +39,7 @@ function MiniBinChart({
   const activeBinInRange = activeBinId >= lowerBinId && activeBinId <= upperBinId;
 
   return (
-    <div className="relative w-full h-8 flex items-end gap-px">
+    <div className="relative w-full h-8 flex items-end gap-px overflow-hidden">
       {bins.map((bin) => {
         const amountX = parseFloat(bin.amountX) || 0;
         const amountY = parseFloat(bin.amountY) || 0;
@@ -52,8 +52,8 @@ function MiniBinChart({
         return (
           <div
             key={bin.binId}
-            className="flex-1 flex flex-col justify-end min-w-[2px]"
-            style={{ height: "100%" }}
+            className="flex-1 flex flex-col justify-end"
+            style={{ height: "100%", minWidth: "1px" }}
           >
             <div
               className={`w-full rounded-t-sm transition-opacity ${

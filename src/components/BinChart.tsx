@@ -54,23 +54,23 @@ export default function BinChart({
       </div>
 
       {/* Chart */}
-      <div className="flex items-end gap-[2px] h-48 px-2">
+      <div className="flex items-end gap-[1px] h-48">
         {bins.map((bin) => {
-          const amountX = parseFloat(bin.amountX) || 0;
-          const amountY = parseFloat(bin.amountY) || 0;
-          // Scale each token independently so both are visible
-          const heightX = (amountX / maxAmountX) * 100;
-          const heightY = (amountY / maxAmountY) * 100;
-          const isActive = bin.binId === activeBinId;
-          // Total height is the max of the two, not the sum
-          const totalHeight = Math.max(heightX, heightY, 2);
+            const amountX = parseFloat(bin.amountX) || 0;
+            const amountY = parseFloat(bin.amountY) || 0;
+            // Scale each token independently so both are visible
+            const heightX = (amountX / maxAmountX) * 100;
+            const heightY = (amountY / maxAmountY) * 100;
+            const isActive = bin.binId === activeBinId;
+            // Total height is the max of the two, not the sum
+            const totalHeight = Math.max(heightX, heightY, 2);
 
-          return (
-            <div
-              key={bin.binId}
-              className="flex-1 flex flex-col justify-end items-center group relative min-w-[3px]"
-              style={{ height: "100%" }}
-            >
+            return (
+              <div
+                key={bin.binId}
+                className="flex-1 flex flex-col justify-end items-center group relative"
+                style={{ height: "100%", minWidth: "1px" }}
+              >
               {/* Tooltip on hover */}
               <div className="absolute bottom-full mb-2 hidden group-hover:block z-10">
                 <div className="bg-zinc-900/95 border border-white/20 rounded-lg px-3 py-2 text-xs whitespace-nowrap backdrop-blur-sm shadow-xl">
@@ -145,7 +145,7 @@ export default function BinChart({
         })}
       </div>
 
-      <div className="flex justify-between text-[10px] text-muted-foreground font-mono px-2">
+      <div className="flex justify-between text-[10px] text-muted-foreground font-mono">
         <span>{formatCompactDecimal(bins[0]?.price || "0")}</span>
         <span>
           {formatCompactDecimal(bins[Math.floor(bins.length / 2)]?.price || "0")}
