@@ -17,6 +17,8 @@ export type AutoCloseStatus =
   | "closed"
   | "error";
 
+export type AutoCloseDirection = "above" | "below" | "both";
+
 export interface AutoCloseLogEntry {
   timestamp: number;
   type: "range" | "system";
@@ -29,6 +31,7 @@ interface AutoCloseEntry {
   poolAddress: string;
   upperBinId: number;
   lowerBinId: number;
+  direction: AutoCloseDirection;
 }
 
 interface AutoCloseState {
@@ -104,10 +107,10 @@ export function useAutoClose() {
   }, []);
 
   const enableAutoClose = useCallback(
-    (positionId: string, poolAddress: string, lowerBinId: number, upperBinId: number) => {
+    (positionId: string, poolAddress: string, lowerBinId: number, upperBinId: number, direction: AutoCloseDirection = "above") => {
       setState((prev) => {
         if (prev.entries.some((e) => e.positionId === positionId)) return prev;
-        const newEntry: AutoCloseEntry = { positionId, poolAddress, upperBinId, lowerBinId };
+        const newEntry: AutoCloseEntry = { positionId, poolAddress, upperBinId, lowerBinId, direction };
         const newEntries = [...prev.entries, newEntry];
         saveEntries(newEntries);
         return {
@@ -160,6 +163,27 @@ export function useAutoClose() {
     [state.logs]
   );
 
+  const getDirection = useCallback(
+    (positionId: string): AutoCloseDirection => {
+      const entry = state.entries.find((e) => e.positionId === positionId);
+      return entry?.direction || "above";
+    },
+    [state.entries]
+  );
+
+  const updateDirection = useCallback(
+    (positionId: string, direction: AutoCloseDirection) => {
+      setState((prev) => {
+        const newEntries = prev.entries.map((e) =>
+          e.positionId === positionId ? { ...e, direction } : e
+        );
+        saveEntries(newEntries);
+        return { ...prev, entries: newEntries };
+      });
+    },
+    []
+  );
+
   // Polling loop
   useEffect(() => {
     if (!publicKey || state.entries.length === 0) return;
@@ -175,19 +199,32 @@ export function useAutoClose() {
 
           // 1. Check Out-of-Range Condition
           const { binId } = await getActiveBinForPool(connection, entry.poolAddress);
-          if (binId > entry.upperBinId) {
+
+          const outOfRangeAbove = binId > entry.upperBinId;
+          const outOfRangeBelow = binId < entry.lowerBinId;
+
+          if (outOfRangeAbove && (entry.direction === "above" || entry.direction === "both")) {
             triggerClose = true;
-            closeReason = "Out of range";
+            closeReason = "Out of range (above)";
             addLog(entry.positionId, {
               type: "range",
               status: "triggered",
               message: `Active Bin ${binId} > Upper Bin ${entry.upperBinId}`,
             });
+          } else if (outOfRangeBelow && (entry.direction === "below" || entry.direction === "both")) {
+            triggerClose = true;
+            closeReason = "Out of range (below)";
+            addLog(entry.positionId, {
+              type: "range",
+              status: "triggered",
+              message: `Active Bin ${binId} < Lower Bin ${entry.lowerBinId}`,
+            });
           } else {
+            const inRangeMsg = `Bin ${binId} is within range (${entry.lowerBinId} – ${entry.upperBinId})`;
             addLog(entry.positionId, {
               type: "range",
               status: "passed",
-              message: `Bin ${binId} is within range (<= ${entry.upperBinId})`,
+              message: inRangeMsg,
             });
           }
 
@@ -300,6 +337,8 @@ export function useAutoClose() {
     getStatus,
     getError,
     getLogs,
+    getDirection,
+    updateDirection,
     entries: state.entries,
     pollInterval,
     updatePollInterval,

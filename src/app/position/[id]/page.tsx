@@ -272,8 +272,10 @@ export default function PositionDetailPage() {
               isEnabled={autoClose.isAutoCloseEnabled(positionId)}
               status={autoClose.getStatus(positionId)}
               error={autoClose.getError(positionId)}
+              direction={autoClose.getDirection(positionId)}
               onEnable={autoClose.enableAutoClose}
               onDisable={autoClose.disableAutoClose}
+              onDirectionChange={autoClose.updateDirection}
             />
 
             <Separator className="bg-white/5" />

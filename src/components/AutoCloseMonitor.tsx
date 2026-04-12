@@ -1,14 +1,16 @@
 "use client";
 
 import React, { createContext, useContext } from "react";
-import { useAutoClose, AutoCloseStatus } from "@/hooks/useAutoClose";
+import { useAutoClose, AutoCloseStatus, AutoCloseDirection } from "@/hooks/useAutoClose";
 
 interface AutoCloseContextValue {
-  enableAutoClose: (positionId: string, poolAddress: string, lowerBinId: number, upperBinId: number) => void;
+  enableAutoClose: (positionId: string, poolAddress: string, lowerBinId: number, upperBinId: number, direction?: AutoCloseDirection) => void;
   disableAutoClose: (positionId: string) => void;
   isAutoCloseEnabled: (positionId: string) => boolean;
   getStatus: (positionId: string) => AutoCloseStatus;
   getError: (positionId: string) => string | undefined;
+  getDirection: (positionId: string) => AutoCloseDirection;
+  updateDirection: (positionId: string, direction: AutoCloseDirection) => void;
   pollInterval: number;
   updatePollInterval: (ms: number) => void;
   getLogs: (positionId: string) => any[];
@@ -39,6 +41,8 @@ export default function AutoCloseMonitor({ children }: { children: React.ReactNo
         isAutoCloseEnabled: autoClose.isAutoCloseEnabled,
         getStatus: autoClose.getStatus,
         getError: autoClose.getError,
+        getDirection: autoClose.getDirection,
+        updateDirection: autoClose.updateDirection,
         pollInterval: autoClose.pollInterval,
         updatePollInterval: autoClose.updatePollInterval,
         getLogs: autoClose.getLogs,

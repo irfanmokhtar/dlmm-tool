@@ -1,7 +1,7 @@
 "use client";
 
 import { useAutoCloseContext } from "@/components/AutoCloseMonitor";
-import { useState } from "react";
+import type { AutoCloseDirection, AutoCloseStatus } from "@/hooks/useAutoClose";
 
 interface AutoCloseToggleProps {
   positionId: string;
@@ -9,19 +9,27 @@ interface AutoCloseToggleProps {
   lowerBinId: number;
   upperBinId: number;
   isEnabled: boolean;
-  status: import("@/hooks/useAutoClose").AutoCloseStatus;
+  status: AutoCloseStatus;
   error?: string;
-  onEnable: (positionId: string, poolAddress: string, lowerBinId: number, upperBinId: number) => void;
+  direction: AutoCloseDirection;
+  onEnable: (positionId: string, poolAddress: string, lowerBinId: number, upperBinId: number, direction: AutoCloseDirection) => void;
   onDisable: (positionId: string) => void;
+  onDirectionChange: (positionId: string, direction: AutoCloseDirection) => void;
 }
 
-const STATUS_CONFIG: Record<import("@/hooks/useAutoClose").AutoCloseStatus, { label: string; color: string; pulse?: boolean }> = {
+const STATUS_CONFIG: Record<AutoCloseStatus, { label: string; color: string; pulse?: boolean }> = {
   idle: { label: "Off", color: "text-muted-foreground" },
   monitoring: { label: "Monitoring", color: "text-amber-400", pulse: true },
   triggered: { label: "Triggered!", color: "text-orange-400", pulse: true },
   closing: { label: "Closing...", color: "text-orange-400", pulse: true },
   closed: { label: "Closed", color: "text-emerald-400" },
   error: { label: "Error", color: "text-rose-400" },
+};
+
+const DIRECTION_CONFIG: Record<AutoCloseDirection, { label: string; description: string }> = {
+  above: { label: "Above", description: "Close when price moves above range" },
+  below: { label: "Below", description: "Close when price moves below range" },
+  both: { label: "Either", description: "Close when price exits range either way" },
 };
 
 export default function AutoCloseToggle({
@@ -32,8 +40,10 @@ export default function AutoCloseToggle({
   isEnabled,
   status,
   error,
+  direction,
   onEnable,
   onDisable,
+  onDirectionChange,
 }: AutoCloseToggleProps) {
   const statusConfig = STATUS_CONFIG[status];
   const { pollInterval, updatePollInterval } = useAutoCloseContext();
@@ -42,9 +52,11 @@ export default function AutoCloseToggle({
     if (isEnabled) {
       onDisable(positionId);
     } else {
-      onEnable(positionId, poolAddress, lowerBinId, upperBinId);
+      onEnable(positionId, poolAddress, lowerBinId, upperBinId, direction);
     }
   };
+
+  const dirConfig = DIRECTION_CONFIG[direction];
 
   return (
     <div className="space-y-3">
@@ -52,7 +64,7 @@ export default function AutoCloseToggle({
         <div className="space-y-0.5">
           <p className="text-sm font-medium text-foreground">Auto-Close</p>
           <p className="text-[10px] text-muted-foreground">
-            Close when price moves above range
+            {dirConfig.description}
           </p>
         </div>
         <button
@@ -67,6 +79,27 @@ export default function AutoCloseToggle({
             }`}
           />
         </button>
+      </div>
+
+      {/* Direction Picker */}
+      <div className="flex gap-1.5">
+        {(["above", "below", "both"] as AutoCloseDirection[]).map((dir) => {
+          const cfg = DIRECTION_CONFIG[dir];
+          const isActive = direction === dir;
+          return (
+            <button
+              key={dir}
+              onClick={() => onDirectionChange(positionId, dir)}
+              className={`flex-1 text-[10px] font-medium py-1.5 rounded-md border transition-colors ${
+                isActive
+                  ? "bg-teal-500/15 border-teal-500/30 text-teal-400"
+                  : "bg-white/[0.03] border-white/[0.06] text-muted-foreground hover:text-foreground hover:border-white/[0.12]"
+              }`}
+            >
+              {cfg.label}
+            </button>
+          );
+        })}
       </div>
 
       {isEnabled && (
@@ -113,8 +146,9 @@ export default function AutoCloseToggle({
 
       {isEnabled && (
         <p className="text-[10px] text-muted-foreground leading-relaxed px-1">
-          Monitoring current price. When the active bin exceeds bin #{upperBinId}, 
-          the position will be closed automatically in the background.
+          {direction === "above" && `When the active bin exceeds bin #${upperBinId}, the position will be closed automatically.`}
+          {direction === "below" && `When the active bin drops below bin #${lowerBinId}, the position will be closed automatically.`}
+          {direction === "both" && `When the active bin exits the range (bin #${lowerBinId} – #${upperBinId}), the position will be closed automatically.`}
         </p>
       )}
     </div>
