@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { getUserPositions, UserPosition } from "@/lib/dlmm";
 import { logger } from "@/lib/logger";
@@ -34,6 +34,7 @@ export default function PositionProvider({ children }: { children: React.ReactNo
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshInterval, setRefreshInterval] = useState(DEFAULT_REFRESH_INTERVAL);
+  const isFirstLoad = useRef(true);
 
   // Load settings from localStorage
   useEffect(() => {
@@ -57,21 +58,22 @@ export default function PositionProvider({ children }: { children: React.ReactNo
       return;
     }
 
-    if (positions.length === 0) setLoading(true);
+    if (isFirstLoad.current) setLoading(true);
     setError(null);
 
     try {
       const userPositions = await getUserPositions(connection, publicKey);
       setPositions(userPositions);
+      isFirstLoad.current = false;
     } catch (err) {
       logger.error("Error fetching positions:", err);
-      if (positions.length === 0) {
+      if (isFirstLoad.current) {
         setError(err instanceof Error ? err.message : "Failed to fetch positions");
       }
     } finally {
       setLoading(false);
     }
-  }, [connection, publicKey, positions.length]);
+  }, [connection, publicKey]);
 
   useEffect(() => {
     fetchPositions();
