@@ -64,6 +64,11 @@ export default function PositionDetailPage() {
     );
 
     try {
+      // Read swap config from auto-close context (shared with AutoCloseToggle)
+      const swapEnabled = autoClose.getSwapEnabled(positionId);
+      const swapOutputMint = autoClose.getSwapOutputMint(positionId);
+      const swapSlippageBps = autoClose.getSwapSlippageBps(positionId);
+
       const response = await fetch("/api/auto-close", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -73,6 +78,13 @@ export default function PositionDetailPage() {
           lowerBinId: position.positionData.lowerBinId,
           upperBinId: position.positionData.upperBinId,
           closeReason: "Manual withdraw",
+          swapConfig: swapEnabled
+            ? { enabled: true, outputMint: swapOutputMint, slippageBps: swapSlippageBps }
+            : { enabled: false, outputMint: "auto", slippageBps: 200 },
+          tokenXMint: position.tokenX.mint,
+          tokenYMint: position.tokenY.mint,
+          tokenXDecimals: position.tokenX.decimals,
+          tokenYDecimals: position.tokenY.decimals,
         }),
       });
 
@@ -102,7 +114,10 @@ export default function PositionDetailPage() {
         `[Withdraw] ✅ Position closed successfully:\n` +
         `  Transactions: ${result.totalChunks}\n` +
         `  Signatures:\n` +
-        (result.signatures || []).map((s: string) => `    • ${s} (https://solscan.io/tx/${s})`).join("\n")
+        (result.signatures || []).map((s: string) => `    • ${s} (https://solscan.io/tx/${s})`).join("\n") +
+        (result.swapResults?.length ? `\n  Swap results:\n` + result.swapResults.map((r: any) =>
+          r.success ? `    ✅ ${r.inputMint} → ${r.outputMint} via ${r.method}` : `    ❌ ${r.inputMint} → ${r.outputMint}: ${r.error}`
+        ).join("\n") : "")
       );
       setWithdrawSuccess(true);
 
@@ -333,6 +348,8 @@ export default function PositionDetailPage() {
               takeProfitPct={autoClose.getTakeProfit(positionId)}
               stopLossPct={autoClose.getStopLoss(positionId)}
               pnlPercent={position.pnlPercent}
+              tokenXSymbol={position.tokenX.symbol}
+              tokenYSymbol={position.tokenY.symbol}
               onEnable={autoClose.enableAutoClose}
               onDisable={autoClose.disableAutoClose}
               onDirectionChange={autoClose.updateDirection}
@@ -357,6 +374,9 @@ export default function PositionDetailPage() {
             {claimError && (
               <p className="text-xs text-rose-400 mt-1">{claimError}</p>
             )}
+
+            <Separator className="bg-white/5" />
+
             <Button
               variant="outline"
               className="w-full border-rose-500/20 text-rose-400 hover:bg-rose-500/10"

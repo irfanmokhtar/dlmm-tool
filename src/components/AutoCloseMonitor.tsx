@@ -4,7 +4,7 @@ import React, { createContext, useContext } from "react";
 import { useAutoClose, AutoCloseStatus, AutoCloseDirection, AutoCloseTriggerMode } from "@/hooks/useAutoClose";
 
 interface AutoCloseContextValue {
-  enableAutoClose: (positionId: string, poolAddress: string, lowerBinId: number, upperBinId: number, direction?: AutoCloseDirection, triggerMode?: AutoCloseTriggerMode, takeProfitPct?: number, stopLossPct?: number) => void;
+  enableAutoClose: (positionId: string, poolAddress: string, lowerBinId: number, upperBinId: number, direction?: AutoCloseDirection, triggerMode?: AutoCloseTriggerMode, takeProfitPct?: number, stopLossPct?: number, swapEnabled?: boolean, swapOutputMint?: "auto" | string, swapSlippageBps?: number) => void;
   disableAutoClose: (positionId: string) => void;
   isAutoCloseEnabled: (positionId: string) => boolean;
   getStatus: (positionId: string) => AutoCloseStatus;
@@ -20,6 +20,12 @@ interface AutoCloseContextValue {
   getWarmupRemaining: (positionId: string) => number;
   getWarmupDuration: (positionId: string) => number;
   updateWarmupDuration: (positionId: string, ms: number) => void;
+  getSwapEnabled: (positionId: string) => boolean;
+  updateSwapEnabled: (positionId: string, enabled: boolean) => void;
+  getSwapOutputMint: (positionId: string) => "auto" | string;
+  updateSwapOutputMint: (positionId: string, mint: "auto" | string) => void;
+  getSwapSlippageBps: (positionId: string) => number;
+  updateSwapSlippageBps: (positionId: string, bps: number) => void;
   pollInterval: number;
   updatePollInterval: (ms: number) => void;
   getLogs: (positionId: string) => any[];
@@ -61,6 +67,12 @@ export default function AutoCloseMonitor({ children }: { children: React.ReactNo
         getWarmupRemaining: autoClose.getWarmupRemaining,
         getWarmupDuration: autoClose.getWarmupDuration,
         updateWarmupDuration: autoClose.updateWarmupDuration,
+        getSwapEnabled: autoClose.getSwapEnabled,
+        updateSwapEnabled: autoClose.updateSwapEnabled,
+        getSwapOutputMint: autoClose.getSwapOutputMint,
+        updateSwapOutputMint: autoClose.updateSwapOutputMint,
+        getSwapSlippageBps: autoClose.getSwapSlippageBps,
+        updateSwapSlippageBps: autoClose.updateSwapSlippageBps,
         pollInterval: autoClose.pollInterval,
         updatePollInterval: autoClose.updatePollInterval,
         getLogs: autoClose.getLogs,

@@ -6,7 +6,7 @@ import WalletButton from "./WalletButton";
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: "◈" },
-  { href: "/pools", label: "Pools", icon: "◉", disabled: true },
+  { href: "/pools", label: "Pools", icon: "◉" },
   { href: "/settings", label: "Settings", icon: "⚙", disabled: true },
 ];
 
@@ -52,11 +52,7 @@ export default function Sidebar() {
             >
               <span className="text-lg">{item.icon}</span>
               <span>{item.label}</span>
-              {item.disabled && (
-                <span className="ml-auto text-[10px] bg-white/5 px-1.5 py-0.5 rounded text-muted-foreground/50">
-                  Soon
-                </span>
-              )}
+
             </Link>
           );
         })}

@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { getActiveBinForPool } from "@/lib/dlmm";
 import { logger } from "@/lib/logger";
+import type { SwapConfig } from "@/lib/types/swap";
+import { DEFAULT_SWAP_CONFIG } from "@/lib/types/swap";
 
 const STORAGE_KEY = "dlmm-auto-close";
 const SETTINGS_KEY = "dlmm-auto-close-settings";
@@ -25,7 +27,7 @@ export type AutoCloseTriggerMode = "range" | "pnl" | "both";
 
 export interface AutoCloseLogEntry {
   timestamp: number;
-  type: "range" | "pnl" | "system";
+  type: "range" | "pnl" | "system" | "swap";
   status: "passed" | "triggered" | "error" | "info";
   message: string;
 }
@@ -41,6 +43,9 @@ interface AutoCloseEntry {
   stopLossPct?: number;
   enabledAt: number;
   pnlWarmupMs: number;
+  swapEnabled: boolean;
+  swapOutputMint: "auto" | string;
+  swapSlippageBps: number;
 }
 
 interface AutoCloseState {
@@ -63,6 +68,9 @@ function migrateEntry(entry: Partial<AutoCloseEntry> & { positionId: string; poo
     stopLossPct: entry.stopLossPct,
     enabledAt: entry.enabledAt ?? 0,
     pnlWarmupMs: entry.pnlWarmupMs ?? DEFAULT_PNL_WARMUP_MS,
+    swapEnabled: entry.swapEnabled ?? true,
+    swapOutputMint: entry.swapOutputMint ?? "auto",
+    swapSlippageBps: entry.swapSlippageBps ?? DEFAULT_SWAP_CONFIG.slippageBps,
   };
 }
 
@@ -184,7 +192,10 @@ export function useAutoClose() {
       direction: AutoCloseDirection = "above",
       triggerMode: AutoCloseTriggerMode = "range",
       takeProfitPct?: number,
-      stopLossPct?: number
+      stopLossPct?: number,
+      swapEnabled: boolean = true,
+      swapOutputMint: "auto" | string = "auto",
+      swapSlippageBps: number = DEFAULT_SWAP_CONFIG.slippageBps
     ) => {
       setState((prev) => {
         if (prev.entries.some((e) => e.positionId === positionId)) return prev;
@@ -199,6 +210,9 @@ export function useAutoClose() {
           stopLossPct,
           enabledAt: Date.now(),
           pnlWarmupMs: DEFAULT_PNL_WARMUP_MS,
+          swapEnabled,
+          swapOutputMint,
+          swapSlippageBps,
         };
         const newEntries = [...prev.entries, newEntry];
         saveEntries(newEntries);
@@ -359,6 +373,71 @@ export function useAutoClose() {
       setState((prev) => {
         const newEntries = prev.entries.map((e) =>
           e.positionId === positionId ? { ...e, pnlWarmupMs: ms } : e
+        );
+        saveEntries(newEntries);
+        return { ...prev, entries: newEntries };
+      });
+    },
+    []
+  );
+
+  // --- Swap config getters/setters ---
+
+  const getSwapEnabled = useCallback(
+    (positionId: string): boolean => {
+      const entry = state.entries.find((e) => e.positionId === positionId);
+      return entry?.swapEnabled ?? true;
+    },
+    [state.entries]
+  );
+
+  const updateSwapEnabled = useCallback(
+    (positionId: string, enabled: boolean) => {
+      setState((prev) => {
+        const newEntries = prev.entries.map((e) =>
+          e.positionId === positionId ? { ...e, swapEnabled: enabled } : e
+        );
+        saveEntries(newEntries);
+        return { ...prev, entries: newEntries };
+      });
+    },
+    []
+  );
+
+  const getSwapOutputMint = useCallback(
+    (positionId: string): "auto" | string => {
+      const entry = state.entries.find((e) => e.positionId === positionId);
+      return entry?.swapOutputMint ?? "auto";
+    },
+    [state.entries]
+  );
+
+  const updateSwapOutputMint = useCallback(
+    (positionId: string, mint: "auto" | string) => {
+      setState((prev) => {
+        const newEntries = prev.entries.map((e) =>
+          e.positionId === positionId ? { ...e, swapOutputMint: mint } : e
+        );
+        saveEntries(newEntries);
+        return { ...prev, entries: newEntries };
+      });
+    },
+    []
+  );
+
+  const getSwapSlippageBps = useCallback(
+    (positionId: string): number => {
+      const entry = state.entries.find((e) => e.positionId === positionId);
+      return entry?.swapSlippageBps ?? DEFAULT_SWAP_CONFIG.slippageBps;
+    },
+    [state.entries]
+  );
+
+  const updateSwapSlippageBps = useCallback(
+    (positionId: string, bps: number) => {
+      setState((prev) => {
+        const newEntries = prev.entries.map((e) =>
+          e.positionId === positionId ? { ...e, swapSlippageBps: bps } : e
         );
         saveEntries(newEntries);
         return { ...prev, entries: newEntries };
@@ -529,6 +608,11 @@ export function useAutoClose() {
                   lowerBinId: entry.lowerBinId,
                   upperBinId: entry.upperBinId,
                   closeReason,
+                  swapConfig: {
+                    enabled: entry.swapEnabled,
+                    outputMint: entry.swapOutputMint,
+                    slippageBps: entry.swapSlippageBps,
+                  },
                 }),
               });
 
@@ -569,6 +653,31 @@ export function useAutoClose() {
                   ? `Position closed successfully (${result.totalChunks} transactions) — ${closeReason}`
                   : `Position closed successfully — ${closeReason}`,
               });
+
+              // Log swap results if present
+              if (result.swapResults && Array.isArray(result.swapResults)) {
+                for (const swapResult of result.swapResults) {
+                  if (swapResult.method === "skipped") {
+                    addLog(entry.positionId, {
+                      type: "swap",
+                      status: "info",
+                      message: `Swap skipped (dust amount): ${swapResult.inputMint}`,
+                    });
+                  } else if (swapResult.success) {
+                    addLog(entry.positionId, {
+                      type: "swap",
+                      status: "info",
+                      message: `Swap successful: ${swapResult.inputMint} → ${swapResult.outputMint} via ${swapResult.method}${swapResult.signatures?.length ? ` (tx: ${swapResult.signatures[0].slice(0, 8)}...)` : ""}`,
+                    });
+                  } else {
+                    addLog(entry.positionId, {
+                      type: "swap",
+                      status: "error",
+                      message: `Swap failed: ${swapResult.inputMint} → ${swapResult.outputMint}: ${swapResult.error || "Unknown error"}`,
+                    });
+                  }
+                }
+              }
 
               setState((prev) => ({
                 ...prev,
@@ -623,6 +732,12 @@ export function useAutoClose() {
     getWarmupRemaining,
     getWarmupDuration,
     updateWarmupDuration,
+    getSwapEnabled,
+    updateSwapEnabled,
+    getSwapOutputMint,
+    updateSwapOutputMint,
+    getSwapSlippageBps,
+    updateSwapSlippageBps,
     entries: state.entries,
     pollInterval,
     updatePollInterval,

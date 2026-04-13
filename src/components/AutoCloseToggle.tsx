@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useAutoCloseContext } from "@/components/AutoCloseMonitor";
 import type { AutoCloseDirection, AutoCloseStatus, AutoCloseTriggerMode } from "@/hooks/useAutoClose";
+import { SOL_MINT, USDC_MINT } from "@/lib/types/swap";
 
 interface AutoCloseToggleProps {
   positionId: string;
@@ -17,7 +18,9 @@ interface AutoCloseToggleProps {
   takeProfitPct?: number;
   stopLossPct?: number;
   pnlPercent?: string;
-  onEnable: (positionId: string, poolAddress: string, lowerBinId: number, upperBinId: number, direction: AutoCloseDirection, triggerMode: AutoCloseTriggerMode, takeProfitPct?: number, stopLossPct?: number) => void;
+  tokenXSymbol?: string;
+  tokenYSymbol?: string;
+  onEnable: (positionId: string, poolAddress: string, lowerBinId: number, upperBinId: number, direction: AutoCloseDirection, triggerMode: AutoCloseTriggerMode, takeProfitPct?: number, stopLossPct?: number, swapEnabled?: boolean, swapOutputMint?: "auto" | string, swapSlippageBps?: number) => void;
   onDisable: (positionId: string) => void;
   onDirectionChange: (positionId: string, direction: AutoCloseDirection) => void;
   onTriggerModeChange: (positionId: string, triggerMode: AutoCloseTriggerMode) => void;
@@ -67,6 +70,8 @@ export default function AutoCloseToggle({
   takeProfitPct,
   stopLossPct,
   pnlPercent,
+  tokenXSymbol,
+  tokenYSymbol,
   onEnable,
   onDisable,
   onDirectionChange,
@@ -75,12 +80,16 @@ export default function AutoCloseToggle({
   onStopLossChange,
 }: AutoCloseToggleProps) {
   const statusConfig = STATUS_CONFIG[status];
-  const { pollInterval, updatePollInterval, getWarmupRemaining, getWarmupDuration, updateWarmupDuration } = useAutoCloseContext();
+  const { pollInterval, updatePollInterval, getWarmupRemaining, getWarmupDuration, updateWarmupDuration,
+    getSwapEnabled, updateSwapEnabled, getSwapOutputMint, updateSwapOutputMint, getSwapSlippageBps, updateSwapSlippageBps } = useAutoCloseContext();
 
   const [tpInput, setTpInput] = useState<string>(takeProfitPct != null ? String(takeProfitPct) : "");
   const [slInput, setSlInput] = useState<string>(stopLossPct != null ? String(stopLossPct) : "");
   const [warmupInput, setWarmupInput] = useState<string>(String(Math.round(getWarmupDuration(positionId) / 60_000)));
   const [warmupRemaining, setWarmupRemaining] = useState<number>(0);
+  const [swapEnabled, setSwapEnabled] = useState(getSwapEnabled(positionId));
+  const [swapOutputMint, setSwapOutputMint] = useState<"auto" | string>(getSwapOutputMint(positionId));
+  const [swapSlippageInput, setSwapSlippageInput] = useState<string>(String(getSwapSlippageBps(positionId) / 100));
 
   // Sync local inputs when props change
   useEffect(() => {
@@ -112,7 +121,8 @@ export default function AutoCloseToggle({
     } else {
       const tp = tpInput ? Number(tpInput) : undefined;
       const sl = slInput ? Number(slInput) : undefined;
-      onEnable(positionId, poolAddress, lowerBinId, upperBinId, direction, triggerMode, tp, sl);
+      const slippageBps = Math.round(Number(swapSlippageInput) * 100) || 200;
+      onEnable(positionId, poolAddress, lowerBinId, upperBinId, direction, triggerMode, tp, sl, swapEnabled, swapOutputMint, slippageBps);
     }
   };
 
@@ -316,6 +326,95 @@ export default function AutoCloseToggle({
           )}
         </div>
       )}
+
+      {/* Swap on Close */}
+      <div className="space-y-2 pt-1 border-t border-white/[0.06]">
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <p className="text-[10px] font-medium text-foreground">Swap on Close</p>
+            <p className="text-[9px] text-muted-foreground">
+              Swap all tokens to a single token after closing
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              const newVal = !swapEnabled;
+              setSwapEnabled(newVal);
+              updateSwapEnabled(positionId, newVal);
+            }}
+            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none ${
+              swapEnabled ? "bg-teal-500" : "bg-white/10"
+            }`}
+          >
+            <span
+              className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform duration-200 shadow-sm ${
+                swapEnabled ? "translate-x-5" : "translate-x-1"
+              }`}
+            />
+          </button>
+        </div>
+
+        {swapEnabled && (
+          <div className="space-y-2">
+            {/* Output Token Selector */}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-medium text-blue-400/80 w-16 shrink-0">Receive</span>
+              <div className="flex gap-1 flex-1">
+                {[
+                  { value: "auto", label: tokenYSymbol ? `Auto (${tokenYSymbol})` : "Auto (tokenY)" },
+                  { value: SOL_MINT, label: "SOL" },
+                  { value: USDC_MINT, label: "USDC" },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => {
+                      setSwapOutputMint(opt.value);
+                      updateSwapOutputMint(positionId, opt.value);
+                    }}
+                    className={`flex-1 text-[9px] font-medium py-1 rounded-md border transition-colors ${
+                      swapOutputMint === opt.value
+                        ? "bg-blue-500/15 border-blue-500/30 text-blue-400"
+                        : "bg-white/[0.03] border-white/[0.06] text-muted-foreground hover:text-foreground hover:border-white/[0.12]"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Slippage */}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-medium text-blue-400/80 w-16 shrink-0">Slippage</span>
+              <div className="flex items-center gap-1 flex-1">
+                <input
+                  type="number"
+                  min="0.1"
+                  max="10"
+                  step="0.1"
+                  value={swapSlippageInput}
+                  onChange={(e) => setSwapSlippageInput(e.target.value)}
+                  onBlur={() => {
+                    const val = Number(swapSlippageInput);
+                    if (isNaN(val) || val < 0.1) {
+                      setSwapSlippageInput("2");
+                      updateSwapSlippageBps(positionId, 200);
+                    } else if (val > 10) {
+                      setSwapSlippageInput("10");
+                      updateSwapSlippageBps(positionId, 1000);
+                    } else {
+                      updateSwapSlippageBps(positionId, Math.round(val * 100));
+                    }
+                  }}
+                  onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                  className="flex-1 h-5 px-2 text-right bg-blue-500/5 border border-blue-500/20 rounded-md text-foreground text-[10px] font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+                <span className="text-[10px] text-blue-400/60">%</span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
       {isEnabled && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/5 border border-amber-500/10">

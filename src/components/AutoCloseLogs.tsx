@@ -6,7 +6,7 @@ import { AutoCloseLogEntry } from "@/hooks/useAutoClose";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Activity, CheckCircle2, AlertTriangle, Info, XCircle, TrendingUp, TrendingDown, BarChart3 } from "lucide-react";
+import { Activity, CheckCircle2, AlertTriangle, Info, XCircle, TrendingUp, TrendingDown, BarChart3, ArrowLeftRight } from "lucide-react";
 
 interface AutoCloseLogsProps {
   positionId: string;
@@ -21,6 +21,11 @@ export default function AutoCloseLogs({ positionId }: AutoCloseLogsProps) {
   }
 
   const getStatusIcon = (log: AutoCloseLogEntry) => {
+    if (log.type === "swap") {
+      if (log.status === "error") return <XCircle className="h-3 w-3 text-red-500" />;
+      if (log.status === "info" && log.message.toLowerCase().includes("skipped")) return <CheckCircle2 className="h-3 w-3 text-blue-400" />;
+      return <ArrowLeftRight className="h-3 w-3 text-cyan-400" />;
+    }
     if (log.type === "pnl" && log.status === "triggered") {
       return log.message.toLowerCase().includes("take profit")
         ? <TrendingUp className="h-3 w-3 text-emerald-500" />
@@ -42,6 +47,11 @@ export default function AutoCloseLogs({ positionId }: AutoCloseLogsProps) {
   };
 
   const getStatusColor = (log: AutoCloseLogEntry) => {
+    if (log.type === "swap") {
+      if (log.status === "error") return "bg-red-500/10 text-red-500 border-red-500/20";
+      if (log.status === "info" && log.message.toLowerCase().includes("skipped")) return "bg-blue-500/10 text-blue-400 border-blue-500/20";
+      return "bg-cyan-500/10 text-cyan-400 border-cyan-500/20";
+    }
     if (log.type === "pnl" && log.status === "triggered") {
       return log.message.toLowerCase().includes("take profit")
         ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"

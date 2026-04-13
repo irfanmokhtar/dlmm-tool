@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const METEORA_PNL_BASE = "https://dlmm.datapi.meteora.ag";
+import { DLMM_DATA_API_BASE } from "@/lib/constants";
+
+const METEORA_PNL_BASE = DLMM_DATA_API_BASE;
 
 export async function GET(request: NextRequest) {
   try {
