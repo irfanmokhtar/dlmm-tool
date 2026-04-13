@@ -7,6 +7,7 @@ import PositionCard from "@/components/PositionCard";
 import SkeletonCard from "@/components/SkeletonCard";
 import WalletButton from "@/components/WalletButton";
 import RefreshSettings from "@/components/RefreshSettings";
+import UnclaimedFeesCard from "@/components/UnclaimedFeesCard";
 
 export default function DashboardPage() {
   const { publicKey } = useWallet();
@@ -82,8 +83,15 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Stats Bar */}
-      <StatsBar positions={positions} loading={loading} />
+      {/* Stats Bar + Unclaimed Fees */}
+      <div className="flex flex-col lg:flex-row gap-3">
+        <div className="flex-1">
+          <StatsBar positions={positions} loading={loading} />
+        </div>
+        <div className="lg:w-64 shrink-0">
+          <UnclaimedFeesCard positions={positions} loading={loading} />
+        </div>
+      </div>
 
       {/* Error State */}
       {error && (

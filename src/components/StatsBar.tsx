@@ -20,16 +20,6 @@ export default function StatsBar({ positions, loading }: StatsBarProps) {
   }).length;
   const outOfRangeCount = totalPositions - inRangeCount;
 
-  // Sum up unclaimed fees (simplified — in real app you'd convert to USD)
-  const totalFeeX = positions.reduce(
-    (sum, p) => sum + parseFloat(p.positionData.feeX || "0"),
-    0
-  );
-  const totalFeeY = positions.reduce(
-    (sum, p) => sum + parseFloat(p.positionData.feeY || "0"),
-    0
-  );
-
   const stats = [
     {
       label: "Active Positions",
@@ -49,22 +39,10 @@ export default function StatsBar({ positions, loading }: StatsBarProps) {
       accent: "from-rose-400 to-red-400",
       glow: "shadow-rose-500/10",
     },
-    {
-      label: "Unclaimed Fees",
-      value: loading
-        ? "—"
-        : totalFeeX > 0 || totalFeeY > 0
-        ? `${totalFeeX > 0 ? totalFeeX.toFixed(4) : ""} ${
-            totalFeeY > 0 ? `/ ${totalFeeY.toFixed(2)}` : ""
-          }`
-        : "0",
-      accent: "from-amber-400 to-orange-400",
-      glow: "shadow-amber-500/10",
-    },
   ];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <div className="grid grid-cols-3 gap-3">
       {stats.map((stat) => (
         <Card
           key={stat.label}
