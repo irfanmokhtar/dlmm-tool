@@ -8,6 +8,8 @@ import { logger } from "@/lib/logger";
 const STORAGE_KEY = "dlmm-auto-close";
 const SETTINGS_KEY = "dlmm-auto-close-settings";
 const DEFAULT_POLL_INTERVAL = 15_000; // 15 seconds
+const DEFAULT_PNL_WARMUP_MS = 300_000; // 5 minutes
+const PNL_SANITY_THRESHOLD = 500; // Skip PnL triggers if |pnlPctChange| > 500%
 
 export type AutoCloseStatus =
   | "idle"
@@ -19,9 +21,11 @@ export type AutoCloseStatus =
 
 export type AutoCloseDirection = "above" | "below" | "both";
 
+export type AutoCloseTriggerMode = "range" | "pnl" | "both";
+
 export interface AutoCloseLogEntry {
   timestamp: number;
-  type: "range" | "system";
+  type: "range" | "pnl" | "system";
   status: "passed" | "triggered" | "error" | "info";
   message: string;
 }
@@ -32,6 +36,11 @@ interface AutoCloseEntry {
   upperBinId: number;
   lowerBinId: number;
   direction: AutoCloseDirection;
+  triggerMode: AutoCloseTriggerMode;
+  takeProfitPct?: number;
+  stopLossPct?: number;
+  enabledAt: number;
+  pnlWarmupMs: number;
 }
 
 interface AutoCloseState {
@@ -41,11 +50,30 @@ interface AutoCloseState {
   logs: Record<string, AutoCloseLogEntry[]>;
 }
 
+/** Migrate entries that lack new fields (backward compatible) */
+function migrateEntry(entry: Partial<AutoCloseEntry> & { positionId: string; poolAddress: string }): AutoCloseEntry {
+  return {
+    positionId: entry.positionId,
+    poolAddress: entry.poolAddress,
+    upperBinId: entry.upperBinId ?? 0,
+    lowerBinId: entry.lowerBinId ?? 0,
+    direction: entry.direction ?? "above",
+    triggerMode: entry.triggerMode ?? "range",
+    takeProfitPct: entry.takeProfitPct,
+    stopLossPct: entry.stopLossPct,
+    enabledAt: entry.enabledAt ?? 0,
+    pnlWarmupMs: entry.pnlWarmupMs ?? DEFAULT_PNL_WARMUP_MS,
+  };
+}
+
 function loadEntries(): AutoCloseEntry[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(migrateEntry);
   } catch {
     return [];
   }
@@ -54,6 +82,47 @@ function loadEntries(): AutoCloseEntry[] {
 function saveEntries(entries: AutoCloseEntry[]) {
   if (typeof window === "undefined") return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+}
+
+/** Fetch PnL data for a position from Meteora API (called each poll cycle) */
+async function fetchPositionPnl(
+  poolAddress: string,
+  userAddress: string,
+  positionAddress: string
+): Promise<{ pnlPctChange: number } | null> {
+  try {
+    const query = new URLSearchParams({
+      user: userAddress,
+      status: "open",
+      page: "1",
+      page_size: "100",
+    });
+
+    const response = await fetch(
+      `/api/meteora-pnl?poolAddress=${encodeURIComponent(poolAddress)}&${query.toString()}`
+    );
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    if (!data?.positions || !Array.isArray(data.positions)) return null;
+
+    const pos = data.positions.find(
+      (p: Record<string, unknown>) =>
+        p.positionAddress === positionAddress ||
+        p.position_address === positionAddress
+    );
+
+    if (!pos) return null;
+
+    const rawPct = Number(pos.pnlPctChange ?? pos.pnl_pct_change ?? 0);
+    if (isNaN(rawPct)) return null;
+
+    return { pnlPctChange: rawPct };
+  } catch (err) {
+    logger.warn("[Auto-Close PnL] fetch failed for", positionAddress, err);
+    return null;
+  }
 }
 
 export function useAutoClose() {
@@ -107,10 +176,30 @@ export function useAutoClose() {
   }, []);
 
   const enableAutoClose = useCallback(
-    (positionId: string, poolAddress: string, lowerBinId: number, upperBinId: number, direction: AutoCloseDirection = "above") => {
+    (
+      positionId: string,
+      poolAddress: string,
+      lowerBinId: number,
+      upperBinId: number,
+      direction: AutoCloseDirection = "above",
+      triggerMode: AutoCloseTriggerMode = "range",
+      takeProfitPct?: number,
+      stopLossPct?: number
+    ) => {
       setState((prev) => {
         if (prev.entries.some((e) => e.positionId === positionId)) return prev;
-        const newEntry: AutoCloseEntry = { positionId, poolAddress, upperBinId, lowerBinId, direction };
+        const newEntry: AutoCloseEntry = {
+          positionId,
+          poolAddress,
+          upperBinId,
+          lowerBinId,
+          direction,
+          triggerMode,
+          takeProfitPct,
+          stopLossPct,
+          enabledAt: Date.now(),
+          pnlWarmupMs: DEFAULT_PNL_WARMUP_MS,
+        };
         const newEntries = [...prev.entries, newEntry];
         saveEntries(newEntries);
         return {
@@ -184,9 +273,105 @@ export function useAutoClose() {
     []
   );
 
+  const getTriggerMode = useCallback(
+    (positionId: string): AutoCloseTriggerMode => {
+      const entry = state.entries.find((e) => e.positionId === positionId);
+      return entry?.triggerMode || "range";
+    },
+    [state.entries]
+  );
+
+  const updateTriggerMode = useCallback(
+    (positionId: string, triggerMode: AutoCloseTriggerMode) => {
+      setState((prev) => {
+        const newEntries = prev.entries.map((e) =>
+          e.positionId === positionId ? { ...e, triggerMode } : e
+        );
+        saveEntries(newEntries);
+        return { ...prev, entries: newEntries };
+      });
+    },
+    []
+  );
+
+  const getTakeProfit = useCallback(
+    (positionId: string): number | undefined => {
+      const entry = state.entries.find((e) => e.positionId === positionId);
+      return entry?.takeProfitPct;
+    },
+    [state.entries]
+  );
+
+  const updateTakeProfit = useCallback(
+    (positionId: string, pct: number | undefined) => {
+      setState((prev) => {
+        const newEntries = prev.entries.map((e) =>
+          e.positionId === positionId ? { ...e, takeProfitPct: pct } : e
+        );
+        saveEntries(newEntries);
+        return { ...prev, entries: newEntries };
+      });
+    },
+    []
+  );
+
+  const getStopLoss = useCallback(
+    (positionId: string): number | undefined => {
+      const entry = state.entries.find((e) => e.positionId === positionId);
+      return entry?.stopLossPct;
+    },
+    [state.entries]
+  );
+
+  const updateStopLoss = useCallback(
+    (positionId: string, pct: number | undefined) => {
+      setState((prev) => {
+        const newEntries = prev.entries.map((e) =>
+          e.positionId === positionId ? { ...e, stopLossPct: pct } : e
+        );
+        saveEntries(newEntries);
+        return { ...prev, entries: newEntries };
+      });
+    },
+    []
+  );
+
+  const getWarmupRemaining = useCallback(
+    (positionId: string): number => {
+      const entry = state.entries.find((e) => e.positionId === positionId);
+      if (!entry) return 0;
+      const elapsed = Date.now() - entry.enabledAt;
+      return Math.max(0, entry.pnlWarmupMs - elapsed);
+    },
+    [state.entries]
+  );
+
+  const getWarmupDuration = useCallback(
+    (positionId: string): number => {
+      const entry = state.entries.find((e) => e.positionId === positionId);
+      return entry?.pnlWarmupMs ?? DEFAULT_PNL_WARMUP_MS;
+    },
+    [state.entries]
+  );
+
+  const updateWarmupDuration = useCallback(
+    (positionId: string, ms: number) => {
+      setState((prev) => {
+        const newEntries = prev.entries.map((e) =>
+          e.positionId === positionId ? { ...e, pnlWarmupMs: ms } : e
+        );
+        saveEntries(newEntries);
+        return { ...prev, entries: newEntries };
+      });
+    },
+    []
+  );
+
   // Polling loop
   useEffect(() => {
     if (!publicKey || state.entries.length === 0) return;
+
+    const walletStr = publicKey.toBase58();
 
     const checkPositions = async () => {
       for (const entry of state.entries) {
@@ -196,38 +381,127 @@ export function useAutoClose() {
         try {
           let triggerClose = false;
           let closeReason = "";
+          const mode = entry.triggerMode;
 
-          // 1. Check Out-of-Range Condition
-          const { binId } = await getActiveBinForPool(connection, entry.poolAddress);
+          // --- Range Check (if mode is "range" or "both") ---
+          if (mode === "range" || mode === "both") {
+            const { binId } = await getActiveBinForPool(connection, entry.poolAddress);
 
-          const outOfRangeAbove = binId > entry.upperBinId;
-          const outOfRangeBelow = binId < entry.lowerBinId;
+            const outOfRangeAbove = binId > entry.upperBinId;
+            const outOfRangeBelow = binId < entry.lowerBinId;
 
-          if (outOfRangeAbove && (entry.direction === "above" || entry.direction === "both")) {
-            triggerClose = true;
-            closeReason = "Out of range (above)";
-            addLog(entry.positionId, {
-              type: "range",
-              status: "triggered",
-              message: `Active Bin ${binId} > Upper Bin ${entry.upperBinId}`,
-            });
-          } else if (outOfRangeBelow && (entry.direction === "below" || entry.direction === "both")) {
-            triggerClose = true;
-            closeReason = "Out of range (below)";
-            addLog(entry.positionId, {
-              type: "range",
-              status: "triggered",
-              message: `Active Bin ${binId} < Lower Bin ${entry.lowerBinId}`,
-            });
-          } else {
-            const inRangeMsg = `Bin ${binId} is within range (${entry.lowerBinId} – ${entry.upperBinId})`;
-            addLog(entry.positionId, {
-              type: "range",
-              status: "passed",
-              message: inRangeMsg,
-            });
+            if (outOfRangeAbove && (entry.direction === "above" || entry.direction === "both")) {
+              triggerClose = true;
+              closeReason = "Out of range (above)";
+              addLog(entry.positionId, {
+                type: "range",
+                status: "triggered",
+                message: `Active Bin ${binId} > Upper Bin ${entry.upperBinId}`,
+              });
+            } else if (outOfRangeBelow && (entry.direction === "below" || entry.direction === "both")) {
+              triggerClose = true;
+              closeReason = "Out of range (below)";
+              addLog(entry.positionId, {
+                type: "range",
+                status: "triggered",
+                message: `Active Bin ${binId} < Lower Bin ${entry.lowerBinId}`,
+              });
+            } else {
+              addLog(entry.positionId, {
+                type: "range",
+                status: "passed",
+                message: `Bin ${binId} is within range (${entry.lowerBinId} – ${entry.upperBinId})`,
+              });
+            }
           }
 
+          // --- PnL Check (if mode is "pnl" or "both" and not already triggered by range) ---
+          if (!triggerClose && (mode === "pnl" || mode === "both")) {
+            const hasPnlTriggers = entry.takeProfitPct != null || entry.stopLossPct != null;
+
+            if (!hasPnlTriggers) {
+              addLog(entry.positionId, {
+                type: "pnl",
+                status: "passed",
+                message: "No PnL triggers configured",
+              });
+            } else {
+              // Check warmup period
+              const warmupRemaining = Math.max(0, entry.pnlWarmupMs - (Date.now() - entry.enabledAt));
+
+              if (warmupRemaining > 0) {
+                const secs = Math.ceil(warmupRemaining / 1000);
+                const mins = Math.floor(secs / 60);
+                const remSecs = secs % 60;
+                const timeStr = mins > 0 ? `${mins}m ${remSecs}s` : `${secs}s`;
+                addLog(entry.positionId, {
+                  type: "pnl",
+                  status: "passed",
+                  message: `PnL warmup: ${timeStr} remaining`,
+                });
+              } else {
+                // Warmup complete — fetch and check PnL
+                const pnlData = await fetchPositionPnl(
+                  entry.poolAddress,
+                  walletStr,
+                  entry.positionId
+                );
+
+                if (!pnlData) {
+                  addLog(entry.positionId, {
+                    type: "pnl",
+                    status: "error",
+                    message: "PnL data unavailable — PnL triggers skipped",
+                  });
+                } else {
+                  const { pnlPctChange } = pnlData;
+
+                  // Sanity check: skip extreme PnL values
+                  if (Math.abs(pnlPctChange) > PNL_SANITY_THRESHOLD) {
+                    addLog(entry.positionId, {
+                      type: "pnl",
+                      status: "error",
+                      message: `PnL value seems invalid (${pnlPctChange >= 0 ? "+" : ""}${pnlPctChange.toFixed(1)}%), skipping trigger`,
+                    });
+                  } else {
+                    let pnlTriggered = false;
+
+                    // Take-profit check
+                    if (entry.takeProfitPct != null && pnlPctChange >= entry.takeProfitPct) {
+                      pnlTriggered = true;
+                      triggerClose = true;
+                      closeReason = `Take profit: PnL +${pnlPctChange.toFixed(1)}% ≥ +${entry.takeProfitPct}%`;
+                      addLog(entry.positionId, {
+                        type: "pnl",
+                        status: "triggered",
+                        message: `Take profit triggered: PnL +${pnlPctChange.toFixed(1)}% ≥ +${entry.takeProfitPct}%`,
+                      });
+                    }
+
+                    // Stop-loss check
+                    if (!pnlTriggered && entry.stopLossPct != null && pnlPctChange <= -entry.stopLossPct) {
+                      pnlTriggered = true;
+                      triggerClose = true;
+                      closeReason = `Stop loss: PnL ${pnlPctChange.toFixed(1)}% ≤ -${entry.stopLossPct}%`;
+                      addLog(entry.positionId, {
+                        type: "pnl",
+                        status: "triggered",
+                        message: `Stop loss triggered: PnL ${pnlPctChange.toFixed(1)}% ≤ -${entry.stopLossPct}%`,
+                      });
+                    }
+
+                    if (!pnlTriggered) {
+                      addLog(entry.positionId, {
+                        type: "pnl",
+                        status: "passed",
+                        message: `PnL ${pnlPctChange >= 0 ? "+" : ""}${pnlPctChange.toFixed(1)}% (TP: ${entry.takeProfitPct != null ? `+${entry.takeProfitPct}%` : "—"}, SL: ${entry.stopLossPct != null ? `-${entry.stopLossPct}%` : "—"})`,
+                      });
+                    }
+                  }
+                }
+              }
+            }
+          }
 
           if (triggerClose) {
             // Trigger auto-close via API
@@ -254,6 +528,7 @@ export function useAutoClose() {
                   poolAddress: entry.poolAddress,
                   lowerBinId: entry.lowerBinId,
                   upperBinId: entry.upperBinId,
+                  closeReason,
                 }),
               });
 
@@ -271,7 +546,7 @@ export function useAutoClose() {
                 addLog(entry.positionId, {
                   type: "system",
                   status: "error",
-                  message: `Partial close: ${result.confirmedSignatures?.length || 0} of ${result.totalChunks || "?"} transactions confirmed. Position may need manual retry.`,
+                  message: `Partial close: ${result.confirmedSignatures?.length || 0} of ${result.totalChunks || "?"} transactions confirmed — ${closeReason}. Position may need manual retry.`,
                 });
                 // Keep monitoring — don't mark as closed, allow retry
                 setState((prev) => ({
@@ -291,8 +566,8 @@ export function useAutoClose() {
                 type: "system",
                 status: "info",
                 message: result.totalChunks > 1
-                  ? `Position closed successfully (${result.totalChunks} transactions)`
-                  : "Position closed successfully",
+                  ? `Position closed successfully (${result.totalChunks} transactions) — ${closeReason}`
+                  : `Position closed successfully — ${closeReason}`,
               });
 
               setState((prev) => ({
@@ -318,7 +593,7 @@ export function useAutoClose() {
             }
           }
         } catch (pollErr) {
-          logger.warn(`Failed to check active bin for ${entry.poolAddress}:`, pollErr);
+          logger.warn(`Failed to check position ${entry.positionId}:`, pollErr);
         }
       }
     };
@@ -328,7 +603,7 @@ export function useAutoClose() {
 
     const interval = setInterval(checkPositions, pollInterval);
     return () => clearInterval(interval);
-  }, [publicKey, connection, state.entries, disableAutoClose, pollInterval]);
+  }, [publicKey, connection, state.entries, disableAutoClose, pollInterval, addLog]);
 
   return {
     enableAutoClose,
@@ -339,6 +614,15 @@ export function useAutoClose() {
     getLogs,
     getDirection,
     updateDirection,
+    getTriggerMode,
+    updateTriggerMode,
+    getTakeProfit,
+    updateTakeProfit,
+    getStopLoss,
+    updateStopLoss,
+    getWarmupRemaining,
+    getWarmupDuration,
+    updateWarmupDuration,
     entries: state.entries,
     pollInterval,
     updatePollInterval,

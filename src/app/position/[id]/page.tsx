@@ -72,6 +72,7 @@ export default function PositionDetailPage() {
           poolAddress: position.poolAddress,
           lowerBinId: position.positionData.lowerBinId,
           upperBinId: position.positionData.upperBinId,
+          closeReason: "Manual withdraw",
         }),
       });
 
@@ -328,9 +329,16 @@ export default function PositionDetailPage() {
               status={autoClose.getStatus(positionId)}
               error={autoClose.getError(positionId)}
               direction={autoClose.getDirection(positionId)}
+              triggerMode={autoClose.getTriggerMode(positionId)}
+              takeProfitPct={autoClose.getTakeProfit(positionId)}
+              stopLossPct={autoClose.getStopLoss(positionId)}
+              pnlPercent={position.pnlPercent}
               onEnable={autoClose.enableAutoClose}
               onDisable={autoClose.disableAutoClose}
               onDirectionChange={autoClose.updateDirection}
+              onTriggerModeChange={autoClose.updateTriggerMode}
+              onTakeProfitChange={autoClose.updateTakeProfit}
+              onStopLossChange={autoClose.updateStopLoss}
             />
 
             <Separator className="bg-white/5" />

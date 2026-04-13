@@ -17,7 +17,7 @@ import bs58 from "bs58";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { positionId, poolAddress, lowerBinId, upperBinId } = body;
+    const { positionId, poolAddress, lowerBinId, upperBinId, closeReason } = body;
 
     // Validate inputs
     if (!positionId || !poolAddress || lowerBinId == null || upperBinId == null) {
@@ -66,7 +66,8 @@ export async function POST(request: NextRequest) {
       `  Pool: ${poolAddress}\n` +
       `  Wallet: ${keypair.publicKey.toBase58()}\n` +
       `  Bin Range: ${lowerBinId} → ${upperBinId} (${binCount} bins)\n` +
-      `  Multi-tx expected: ${binCount > 70 ? "YES" : "NO"} (${Math.ceil(binCount / 70)} chunk${Math.ceil(binCount / 70) > 1 ? "s" : ""})`
+      `  Multi-tx expected: ${binCount > 70 ? "YES" : "NO"} (${Math.ceil(binCount / 70)} chunk${Math.ceil(binCount / 70) > 1 ? "s" : ""})\n` +
+      `  Reason: ${closeReason || "Manual trigger"}`
     );
 
     // Use atomic transaction sending with retry logic
@@ -83,6 +84,7 @@ export async function POST(request: NextRequest) {
       console.info(
         `[Auto-Close] ✅ Position closed successfully:\n` +
         `  Position: ${positionId}\n` +
+        `  Reason: ${closeReason || "Manual trigger"}\n` +
         `  Transactions: ${result.totalChunks}\n` +
         `  Signatures:\n` +
         result.confirmedSignatures.map((s) => `    • ${s} (https://solscan.io/tx/${s})`).join("\n")
@@ -91,6 +93,7 @@ export async function POST(request: NextRequest) {
         success: true,
         signatures: result.confirmedSignatures,
         totalChunks: result.totalChunks,
+        closeReason: closeReason || "Manual trigger",
         message: `Position ${positionId} closed successfully (${result.totalChunks} transaction${result.totalChunks > 1 ? "s" : ""})`,
       });
     }

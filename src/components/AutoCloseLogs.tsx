@@ -6,7 +6,7 @@ import { AutoCloseLogEntry } from "@/hooks/useAutoClose";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Activity, CheckCircle2, AlertTriangle, Info, XCircle } from "lucide-react";
+import { Activity, CheckCircle2, AlertTriangle, Info, XCircle, TrendingUp, TrendingDown, BarChart3 } from "lucide-react";
 
 interface AutoCloseLogsProps {
   positionId: string;
@@ -20,8 +20,16 @@ export default function AutoCloseLogs({ positionId }: AutoCloseLogsProps) {
     return null;
   }
 
-  const getStatusIcon = (status: AutoCloseLogEntry["status"]) => {
-    switch (status) {
+  const getStatusIcon = (log: AutoCloseLogEntry) => {
+    if (log.type === "pnl" && log.status === "triggered") {
+      return log.message.toLowerCase().includes("take profit")
+        ? <TrendingUp className="h-3 w-3 text-emerald-500" />
+        : <TrendingDown className="h-3 w-3 text-rose-500" />;
+    }
+    if (log.type === "pnl") {
+      return <BarChart3 className="h-3 w-3 text-violet-400" />;
+    }
+    switch (log.status) {
       case "passed":
         return <CheckCircle2 className="h-3 w-3 text-emerald-500" />;
       case "triggered":
@@ -33,8 +41,19 @@ export default function AutoCloseLogs({ positionId }: AutoCloseLogsProps) {
     }
   };
 
-  const getStatusColor = (status: AutoCloseLogEntry["status"]) => {
-    switch (status) {
+  const getStatusColor = (log: AutoCloseLogEntry) => {
+    if (log.type === "pnl" && log.status === "triggered") {
+      return log.message.toLowerCase().includes("take profit")
+        ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+        : "bg-rose-500/10 text-rose-500 border-rose-500/20";
+    }
+    if (log.type === "pnl" && log.status === "error") {
+      return "bg-violet-500/10 text-violet-400 border-violet-500/20";
+    }
+    if (log.type === "pnl") {
+      return "bg-violet-500/10 text-violet-400 border-violet-500/20";
+    }
+    switch (log.status) {
       case "passed":
         return "bg-emerald-500/10 text-emerald-500 border-emerald-500/20";
       case "triggered":
@@ -69,8 +88,8 @@ export default function AutoCloseLogs({ positionId }: AutoCloseLogsProps) {
                 <div key={`${log.timestamp}-${idx}`} className="p-3 hover:bg-white/[0.02] transition-colors">
                   <div className="flex items-start justify-between mb-1">
                     <div className="flex items-center gap-2">
-                      {getStatusIcon(log.status)}
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      {getStatusIcon(log)}
+                      <span className={`text-[10px] font-bold uppercase tracking-wider ${getStatusColor(log).split(" ").find(c => c.startsWith("text-")) || "text-muted-foreground"}`}>
                         {log.type}
                       </span>
                     </div>

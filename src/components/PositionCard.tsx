@@ -101,6 +101,7 @@ export default function PositionCard({ position }: PositionCardProps) {
   const colorY = TOKEN_COLORS[position.tokenY.symbol] || "#06b6d4";
   const autoClose = useAutoCloseContext();
   const isAutoCloseOn = autoClose.isAutoCloseEnabled(position.publicKey.toBase58());
+  const autoCloseMode = isAutoCloseOn ? autoClose.getTriggerMode(position.publicKey.toBase58()) : null;
   const { currency, toggleCurrency } = usePnLCurrency();
   const solPrice = deriveSolPrice(position);
 
@@ -178,7 +179,7 @@ export default function PositionCard({ position }: PositionCardProps) {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
                   <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-400" />
                 </span>
-                Auto
+                Auto{autoCloseMode && autoCloseMode !== "range" ? ` · ${autoCloseMode === "pnl" ? "PnL" : "Both"}` : ""}
               </Badge>
             )}
             <PositionHealth score={health.score} status={health.status} />
