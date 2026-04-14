@@ -390,15 +390,24 @@ export async function fetchMeteoraPositionPnl(
 export async function getActiveBinForPool(
   connection: Connection,
   poolAddress: string
-): Promise<{ binId: number; price: string }> {
-  const dlmmPool = await getOrCreateDlmmPool(connection, poolAddress);
-  const activeBin = await dlmmPool.getActiveBin();
-  return { binId: activeBin.binId, price: activeBin.price };
+): Promise<{ binId: number; price: string } | null> {
+  try {
+    const dlmmPool = await getOrCreateDlmmPool(connection, poolAddress);
+    const activeBin = await dlmmPool.getActiveBin();
+    if (!activeBin || activeBin.binId == null) {
+      return null;
+    }
+    return { binId: activeBin.binId, price: activeBin.price };
+  } catch (err) {
+    logger.warn("[getActiveBinForPool] Error fetching active bin for", poolAddress, err);
+    return null;
+  }
 }
 
 /**
  * Close a position by removing 100% liquidity, claiming fees, and closing the account.
  * Returns Transaction[] that need to be signed and sent by the wallet.
+ * Returns empty array if the position is already closed or doesn't exist.
  */
 export async function closePosition(
   connection: Connection,
@@ -408,18 +417,46 @@ export async function closePosition(
   lowerBinId: number,
   upperBinId: number
 ): Promise<Transaction[]> {
+  // Pre-check: verify the position account still exists
+  try {
+    const accountInfo = await connection.getAccountInfo(positionPubKey);
+    if (!accountInfo || accountInfo.data === null || accountInfo.lamports === 0) {
+      logger.info(`[closePosition] Position ${positionPubKey.toBase58()} does not exist — already closed`);
+      return [];
+    }
+  } catch (err) {
+    logger.warn(`[closePosition] Could not verify position account:`, err);
+    // Continue — the account check is best-effort
+  }
+
   const dlmmPool = await getOrCreateDlmmPool(connection, poolAddress);
 
-  const transactions = await dlmmPool.removeLiquidity({
-    user: userPubKey,
-    position: positionPubKey,
-    fromBinId: lowerBinId,
-    toBinId: upperBinId,
-    bps: new BN(10000), // 100%
-    shouldClaimAndClose: true,
-  });
+  try {
+    const transactions = await dlmmPool.removeLiquidity({
+      user: userPubKey,
+      position: positionPubKey,
+      fromBinId: lowerBinId,
+      toBinId: upperBinId,
+      bps: new BN(10000), // 100%
+      shouldClaimAndClose: true,
+    });
 
-  return transactions;
+    return transactions;
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    // If the error indicates the position is already closed, return empty array
+    if (
+      errMsg.includes("data") && errMsg.includes("null") ||
+      errMsg.includes("Account does not exist") ||
+      errMsg.includes("0x1") ||
+      errMsg.includes("already closed") ||
+      errMsg.includes("Invalid account")
+    ) {
+      logger.info(`[closePosition] Position ${positionPubKey.toBase58()} appears already closed: ${errMsg}`);
+      return [];
+    }
+    throw err; // Re-throw unexpected errors
+  }
 }
 
 /**

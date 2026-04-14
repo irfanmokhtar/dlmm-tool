@@ -213,6 +213,31 @@ export async function POST(request: NextRequest) {
       `  Confirmed: ${result.confirmedSignatures.length}\n` +
       `  Error: ${result.error || "Failed to close position after retries"}`
     );
+
+    // Check if the position was already closed externally
+    const errMsg = result.error || "";
+    const alreadyClosed =
+      errMsg.includes("already closed") ||
+      errMsg.includes("Account does not exist") ||
+      errMsg.includes("0x1") ||
+      errMsg.includes("Invalid account") ||
+      errMsg.includes("invalid position") ||
+      errMsg.includes("custom program error: 0x1");
+
+    if (alreadyClosed) {
+      console.info(
+        `[Auto-Close] ℹ️ Position ${positionId} appears already closed externally`
+      );
+      return NextResponse.json({
+        success: true,
+        signatures: [],
+        totalChunks: 0,
+        closeReason: closeReason || "Already closed externally",
+        message: `Position ${positionId} was already closed`,
+        alreadyClosed: true,
+      });
+    }
+
     return NextResponse.json(
       {
         success: false,

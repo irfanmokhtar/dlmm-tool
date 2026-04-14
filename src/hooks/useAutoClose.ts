@@ -464,10 +464,20 @@ export function useAutoClose() {
 
           // --- Range Check (if mode is "range" or "both") ---
           if (mode === "range" || mode === "both") {
-            const { binId } = await getActiveBinForPool(connection, entry.poolAddress);
+            try {
+              const activeBinResult = await getActiveBinForPool(connection, entry.poolAddress);
+              if (!activeBinResult || activeBinResult.binId == null) {
+                addLog(entry.positionId, {
+                  type: "range",
+                  status: "error",
+                  message: "Could not fetch active bin — pool may not exist or RPC error",
+                });
+                continue; // Skip to next entry
+              }
+              const { binId } = activeBinResult;
 
-            const outOfRangeAbove = binId > entry.upperBinId;
-            const outOfRangeBelow = binId < entry.lowerBinId;
+              const outOfRangeAbove = binId > entry.upperBinId;
+              const outOfRangeBelow = binId < entry.lowerBinId;
 
             if (outOfRangeAbove && (entry.direction === "above" || entry.direction === "both")) {
               triggerClose = true;
@@ -490,6 +500,14 @@ export function useAutoClose() {
                 type: "range",
                 status: "passed",
                 message: `Bin ${binId} is within range (${entry.lowerBinId} – ${entry.upperBinId})`,
+              });
+            }
+            } catch (rangeErr) {
+              logger.warn(`[Auto-Close] Range check failed for ${entry.positionId}:`, rangeErr);
+              addLog(entry.positionId, {
+                type: "range",
+                status: "error",
+                message: `Range check error: ${rangeErr instanceof Error ? rangeErr.message : String(rangeErr)}`,
               });
             }
           }
@@ -616,10 +634,41 @@ export function useAutoClose() {
                 }),
               });
 
-              const result = await response.json();
+              const result = await response.json().catch(() => null);
 
+              // Handle cases where the API returned an error or the result is malformed
+              if (!result) {
+                throw new Error("Failed to parse API response");
+              }
+
+              // If the position was already closed externally (e.g., via Meteora),
+              // treat it as a successful close and remove from monitoring
               if (!response.ok && !result.partialSuccess) {
-                throw new Error(result.error || "API request failed");
+                const errMsg = result.error || "API request failed";
+                // Detect "already closed" scenarios — position account may not exist anymore
+                const alreadyClosed =
+                  errMsg.toLowerCase().includes("already closed") ||
+                  errMsg.toLowerCase().includes("account does not exist") ||
+                  errMsg.toLowerCase().includes("0x1") || // common Solana program error
+                  errMsg.toLowerCase().includes("invalid position") ||
+                  errMsg.toLowerCase().includes("position not found");
+
+                if (alreadyClosed) {
+                  logger.info(`[Auto-Close] Position ${entry.positionId} appears already closed externally`);
+                  addLog(entry.positionId, {
+                    type: "system",
+                    status: "info",
+                    message: `Position was already closed externally — ${closeReason}`,
+                  });
+                  setState((prev) => ({
+                    ...prev,
+                    statuses: { ...prev.statuses, [entry.positionId]: "closed" },
+                  }));
+                  disableAutoClose(entry.positionId);
+                  return;
+                }
+
+                throw new Error(errMsg);
               }
 
               // Handle partial success — some transactions confirmed but not all
