@@ -34,11 +34,11 @@ export default function PoolCard({ pool, volumeWindow }: PoolCardProps) {
   const volume = pool.volume ?? 0;
   const tvl = pool.active_tvl ?? pool.tvl ?? 0;
   const feeTvlRatio = pool.fee_active_tvl_ratio ?? 0;
+  const globalFeesSol = baseToken.global_fees_sol;
   const holders = pool.base_token_holders ?? 0;
   const topHoldersPct = baseToken.top_holders_pct ?? 0;
   const binStep = pool.dlmm_params?.bin_step ?? 0;
   const feePct = pool.fee_pct ?? 0;
-  const apr = pool.apr ?? 0;
 
   // Risk flag badges
   const riskBadges: { label: string; variant: "danger" | "warning" | "info" | "success" }[] = [];
@@ -101,8 +101,10 @@ export default function PoolCard({ pool, volumeWindow }: PoolCardProps) {
           <p className="font-medium text-foreground">{feeTvlRatio.toFixed(4)}</p>
         </div>
         <div>
-          <span className="text-muted-foreground">APR</span>
-          <p className="font-medium text-foreground">{(apr * 100).toFixed(1)}%</p>
+          <span className="text-muted-foreground">Global Fees</span>
+          <p className={cn("font-medium", globalFeesSol != null && globalFeesSol < 30 ? "text-red-400" : "text-foreground")}>
+            {globalFeesSol != null ? `${globalFeesSol.toFixed(2)} SOL` : "—"}
+          </p>
         </div>
         <div>
           <span className="text-muted-foreground">Mcap</span>

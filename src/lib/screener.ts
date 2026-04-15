@@ -125,6 +125,7 @@ export function rankPools(pools: MeteoraPool[], filters: PoolFilters): ScoredPoo
 
     let cmp = 0;
     switch (filters.sortBy) {
+      case "volume_5m":
       case "volume_30m":
       case "volume_1h":
       case "volume_4h":
@@ -172,6 +173,7 @@ export function filtersToApiParam(filters: PoolFilters): string {
 
 export function sortToApiParam(sortBy: PoolSortField): string {
   switch (sortBy) {
+    case "volume_5m":
     case "volume_30m":
     case "volume_1h":
     case "volume_4h":

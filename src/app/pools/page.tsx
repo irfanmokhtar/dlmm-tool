@@ -8,7 +8,7 @@ import PoolStatsBar from "@/components/PoolStatsBar";
 import SkeletonCard from "@/components/SkeletonCard";
 
 export default function PoolsPage() {
-  const { pools, totalCount, loading, error, filters, updateFilter, refetch } = usePoolScreener();
+  const { pools, totalCount, loading, error, filters, updateFilter, refetch, refreshInterval, setRefreshInterval, refreshOptions } = usePoolScreener();
 
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
@@ -20,13 +20,32 @@ export default function PoolsPage() {
             Discover and screen DLMM pools with risk assessment
           </p>
         </div>
-        <button
-          onClick={refetch}
-          disabled={loading}
-          className="px-3 py-1.5 text-sm rounded-lg bg-white/5 border border-white/10 text-foreground hover:bg-white/10 transition-colors disabled:opacity-50"
-        >
-          {loading ? "Loading..." : "Refresh"}
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 px-2.5 h-8 rounded-lg border border-white/10 bg-white/5">
+            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Auto</span>
+            <select
+              value={refreshInterval}
+              onChange={(e) => setRefreshInterval(Number(e.target.value))}
+              className="bg-transparent text-[10px] font-bold text-teal-400 focus:outline-none cursor-pointer appearance-none pr-1"
+            >
+              {refreshOptions.map((opt) => (
+                <option key={opt.value} value={opt.value} className="bg-[#0d0e12] text-white">
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <svg className="w-2.5 h-2.5 text-muted-foreground pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+          <button
+            onClick={refetch}
+            disabled={loading}
+            className="px-3 py-1.5 text-sm rounded-lg bg-white/5 border border-white/10 text-foreground hover:bg-white/10 transition-colors disabled:opacity-50"
+          >
+            {loading ? "Loading..." : "Refresh"}
+          </button>
+        </div>
       </div>
 
       {/* Stats Bar */}

@@ -1,9 +1,10 @@
 // ─── Time Window ─────────────────────────────────────────────────
-export type TimeWindow = "30m" | "1h" | "4h" | "24h";
+export type TimeWindow = "5m" | "30m" | "1h" | "4h" | "24h";
 
 // ─── Sort ────────────────────────────────────────────────────────
 export type PoolSortField =
   | "score"
+  | "volume_5m"
   | "volume_30m"
   | "volume_1h"
   | "volume_4h"
@@ -37,6 +38,7 @@ export interface MeteoraPoolToken {
   token_program: string;
   top_holders_pct: number;
   dev_balance_pct: number;
+  global_fees_sol: number | null;
   launchpad?: string;
 }
 

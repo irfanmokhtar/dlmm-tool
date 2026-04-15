@@ -19,6 +19,10 @@ interface PoolFiltersProps {
 }
 
 const VOLUME_THRESHOLDS: Record<TimeWindow, { label: string; value: number | null }[]> = {
+  "5m": [
+    { label: "All", value: null }, { label: "≥$50", value: 50 }, { label: "≥$100", value: 100 },
+    { label: "≥$500", value: 500 }, { label: "≥$1K", value: 1000 }, { label: "≥$5K", value: 5000 },
+  ],
   "30m": [
     { label: "All", value: null }, { label: "≥$500", value: 500 }, { label: "≥$1K", value: 1000 },
     { label: "≥$5K", value: 5000 }, { label: "≥$10K", value: 10000 }, { label: "≥$50K", value: 50000 },
@@ -68,7 +72,8 @@ const MCAP_MAX_OPTIONS = [
 ];
 
 const SORT_OPTIONS: { value: PoolSortField; label: string }[] = [
-  { value: "score", label: "Score" }, { value: "volume_24h", label: "Volume" },
+  { value: "score", label: "Score" }, { value: "volume_5m", label: "Vol 5m" },
+  { value: "volume_24h", label: "Vol 24h" },
   { value: "fee_tvl_ratio", label: "Fee/TVL" }, { value: "tvl", label: "TVL" },
   { value: "organic_score", label: "Organic" },
 ];
@@ -78,7 +83,7 @@ const CATEGORY_OPTIONS: { value: PoolFilters["category"]; label: string }[] = [
 ];
 
 const TIME_WINDOWS: { value: TimeWindow; label: string }[] = [
-  { value: "30m", label: "30m" }, { value: "1h", label: "1h" },
+  { value: "5m", label: "5m" }, { value: "30m", label: "30m" }, { value: "1h", label: "1h" },
   { value: "4h", label: "4h" }, { value: "24h", label: "24h" },
 ];
 

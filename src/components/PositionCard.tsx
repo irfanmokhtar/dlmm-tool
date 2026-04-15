@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -100,10 +101,68 @@ export default function PositionCard({ position }: PositionCardProps) {
   const colorX = TOKEN_COLORS[position.tokenX.symbol] || "#6366f1";
   const colorY = TOKEN_COLORS[position.tokenY.symbol] || "#06b6d4";
   const autoClose = useAutoCloseContext();
-  const isAutoCloseOn = autoClose.isAutoCloseEnabled(position.publicKey.toBase58());
-  const autoCloseMode = isAutoCloseOn ? autoClose.getTriggerMode(position.publicKey.toBase58()) : null;
+  const positionId = position.publicKey.toBase58();
+  const isAutoCloseOn = autoClose.isAutoCloseEnabled(positionId);
+  const autoCloseMode = isAutoCloseOn ? autoClose.getTriggerMode(positionId) : null;
   const { currency, toggleCurrency } = usePnLCurrency();
   const solPrice = deriveSolPrice(position);
+
+  const [closing, setClosing] = useState(false);
+  const [closeError, setCloseError] = useState<string | null>(null);
+  const [closeSuccess, setCloseSuccess] = useState(false);
+
+  const handleClose = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (closing || closeSuccess) return;
+
+    setClosing(true);
+    setCloseError(null);
+
+    try {
+      const swapEnabled = autoClose.getSwapEnabled(positionId);
+      const swapOutputMint = autoClose.getSwapOutputMint(positionId);
+      const swapSlippageBps = autoClose.getSwapSlippageBps(positionId);
+
+      const response = await fetch("/api/auto-close", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          positionId,
+          poolAddress: position.poolAddress,
+          lowerBinId: position.positionData.lowerBinId,
+          upperBinId: position.positionData.upperBinId,
+          closeReason: "Manual close from dashboard",
+          swapConfig: swapEnabled
+            ? { enabled: true, outputMint: swapOutputMint, slippageBps: swapSlippageBps }
+            : { enabled: false, outputMint: "auto", slippageBps: 200 },
+          tokenXMint: position.tokenX.mint,
+          tokenYMint: position.tokenY.mint,
+          tokenXDecimals: position.tokenX.decimals,
+          tokenYDecimals: position.tokenY.decimals,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok && !result.partialSuccess) {
+        throw new Error(result.error || "Failed to close position");
+      }
+
+      if (result.partialSuccess) {
+        setCloseError(result.error || `Partial close: ${result.confirmedSignatures?.length || 0} of ${result.totalChunks || "?"} transactions confirmed.`);
+        setClosing(false);
+        return;
+      }
+
+      setCloseSuccess(true);
+      setTimeout(() => window.location.reload(), 2000);
+    } catch (err) {
+      setCloseError(err instanceof Error ? err.message : "Failed to close position");
+    } finally {
+      setClosing(false);
+    }
+  };
 
   const pnlDisplayValue = (() => {
     if (position.pnlUsd == null) return null;
@@ -183,18 +242,42 @@ export default function PositionCard({ position }: PositionCardProps) {
               </Badge>
             )}
             <PositionHealth score={health.score} status={health.status} />
+            {/* Close Position Button */}
+            <button
+              onClick={handleClose}
+              disabled={closing || closeSuccess}
+              className={`ml-auto text-[10px] font-medium px-2 py-0.5 rounded-md border transition-colors ${
+                closeSuccess
+                  ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                  : closeError
+                  ? "bg-rose-500/10 border-rose-500/20 text-rose-400"
+                  : "bg-white/[0.03] border-white/[0.08] text-muted-foreground hover:text-rose-400 hover:border-rose-500/20 hover:bg-rose-500/5"
+              }`}
+              title={closeError || "Close position"}
+            >
+              {closing ? "Closing..." : closeSuccess ? "✓ Closed" : "Close"}
+            </button>
           </div>
+          {closeError && (
+            <p className="text-[10px] text-rose-400 mb-2">{closeError}</p>
+          )}
 
 
-          {/* Active Price */}
+          {/* Market Cap */}
           <div className="mb-4 px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.05]">
             <p className="text-[10px] text-muted-foreground mb-0.5">
-              Active Price
+              Market Cap
             </p>
             <p className="text-sm font-mono font-semibold text-foreground">
-              {parseFloat(position.activeBinPrice).toFixed(4)}
+              {position.tokenX.marketCap != null
+                ? position.tokenX.marketCap >= 1_000_000
+                  ? `$${(position.tokenX.marketCap / 1_000_000).toFixed(2)}M`
+                  : position.tokenX.marketCap >= 1_000
+                    ? `$${(position.tokenX.marketCap / 1_000).toFixed(1)}K`
+                    : `$${position.tokenX.marketCap.toFixed(0)}`
+                : "—"}
               <span className="text-muted-foreground ml-1 text-xs">
-                {position.tokenY.symbol}/{position.tokenX.symbol}
+                {position.tokenX.symbol}
               </span>
             </p>
           </div>

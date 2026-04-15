@@ -8,7 +8,7 @@ import { logger } from "./logger";
 const dlmmCache = new Map<string, Promise<DLMM>>();
 const CACHE_TTL = 30_000; // 30 seconds
 const cacheTimestamps = new Map<string, number>();
-const tokenMetadataCache = new Map<string, { symbol: string, logoURI: string }>();
+const tokenMetadataCache = new Map<string, { symbol: string, logoURI: string, marketCap?: number }>();
 
 async function getOrCreateDlmmPool(connection: Connection, poolAddress: string): Promise<DLMM> {
   const now = Date.now();
@@ -66,8 +66,8 @@ export interface UserPosition {
   poolName: string;
   activeBinId: number;
   activeBinPrice: string;
-  tokenX: { symbol: string; mint: string; decimals: number; logoURI?: string };
-  tokenY: { symbol: string; mint: string; decimals: number; logoURI?: string };
+  tokenX: { symbol: string; mint: string; decimals: number; logoURI?: string; marketCap?: number };
+  tokenY: { symbol: string; mint: string; decimals: number; logoURI?: string; marketCap?: number };
   pnlUsd?: string;
   pnlPercent?: string;
   tokenXPrice?: string;
@@ -143,7 +143,8 @@ async function resolveTokenMetadata(mints: string[]): Promise<void> {
                    if (mint) {
                        tokenMetadataCache.set(mint, {
                            symbol: t.symbol,
-                           logoURI: t.icon || t.logoURI
+                           logoURI: t.icon || t.logoURI,
+                           marketCap: t.mcap ?? t.market_cap ?? undefined,
                        });
                    }
                 });
@@ -277,13 +278,15 @@ export async function getUserPositions(
               symbol: symbolX, 
               mint: mintX, 
               decimals: decimalsX,
-              logoURI: metadataX?.logoURI
+              logoURI: metadataX?.logoURI,
+              marketCap: metadataX?.marketCap,
             },
             tokenY: { 
               symbol: symbolY, 
               mint: mintY, 
               decimals: decimalsY,
-              logoURI: metadataY?.logoURI
+              logoURI: metadataY?.logoURI,
+              marketCap: metadataY?.marketCap,
             },
             pnlUsd: pnlData?.pnlUsd,
             pnlPercent: pnlData?.pnlPctChange,

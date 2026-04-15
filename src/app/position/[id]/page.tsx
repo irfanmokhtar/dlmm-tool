@@ -13,7 +13,6 @@ import BinChart from "@/components/BinChart";
 import PositionHealth from "@/components/PositionHealth";
 import AutoCloseToggle from "@/components/AutoCloseToggle";
 import AutoCloseLogs from "@/components/AutoCloseLogs";
-import PositionActivityCard from "@/components/PositionActivity";
 import { useAutoCloseContext } from "@/components/AutoCloseMonitor";
 import { usePositionData } from "@/components/PositionProvider";
 import TokenLogo from "@/components/TokenLogo";
@@ -328,80 +327,79 @@ export default function PositionDetailPage() {
       </Card>
 
       {/* Actions */}
-      <Card className="bg-white/[0.03] border-white/[0.06] backdrop-blur-sm">
-        <CardContent className="p-5">
-          <h3 className="text-sm font-semibold text-foreground mb-4">
-            Actions
-          </h3>
-          <div className="space-y-3">
-            {/* Auto-Close Toggle */}
-            <AutoCloseToggle
-              positionId={positionId}
-              poolAddress={position.poolAddress}
-              lowerBinId={position.positionData.lowerBinId}
-              upperBinId={position.positionData.upperBinId}
-              isEnabled={autoClose.isAutoCloseEnabled(positionId)}
-              status={autoClose.getStatus(positionId)}
-              error={autoClose.getError(positionId)}
-              direction={autoClose.getDirection(positionId)}
-              triggerMode={autoClose.getTriggerMode(positionId)}
-              takeProfitPct={autoClose.getTakeProfit(positionId)}
-              stopLossPct={autoClose.getStopLoss(positionId)}
-              pnlPercent={position.pnlPercent}
-              tokenXSymbol={position.tokenX.symbol}
-              tokenYSymbol={position.tokenY.symbol}
-              onEnable={autoClose.enableAutoClose}
-              onDisable={autoClose.disableAutoClose}
-              onDirectionChange={autoClose.updateDirection}
-              onTriggerModeChange={autoClose.updateTriggerMode}
-              onTakeProfitChange={autoClose.updateTakeProfit}
-              onStopLossChange={autoClose.updateStopLoss}
-            />
+      <div className="lg:w-1/2">
+        <Card className="bg-white/[0.03] border-white/[0.06] backdrop-blur-sm">
+          <CardContent className="p-5">
+            <h3 className="text-sm font-semibold text-foreground mb-4">
+              Actions
+            </h3>
+            <div className="space-y-3">
+              {/* Auto-Close Toggle */}
+              <AutoCloseToggle
+                positionId={positionId}
+                poolAddress={position.poolAddress}
+                lowerBinId={position.positionData.lowerBinId}
+                upperBinId={position.positionData.upperBinId}
+                isEnabled={autoClose.isAutoCloseEnabled(positionId)}
+                status={autoClose.getStatus(positionId)}
+                error={autoClose.getError(positionId)}
+                direction={autoClose.getDirection(positionId)}
+                triggerMode={autoClose.getTriggerMode(positionId)}
+                takeProfitPct={autoClose.getTakeProfit(positionId)}
+                stopLossPct={autoClose.getStopLoss(positionId)}
+                pnlPercent={position.pnlPercent}
+                tokenXSymbol={position.tokenX.symbol}
+                tokenYSymbol={position.tokenY.symbol}
+                onEnable={autoClose.enableAutoClose}
+                onDisable={autoClose.disableAutoClose}
+                onDirectionChange={autoClose.updateDirection}
+                onTriggerModeChange={autoClose.updateTriggerMode}
+                onTakeProfitChange={autoClose.updateTakeProfit}
+                onStopLossChange={autoClose.updateStopLoss}
+              />
 
-            <Separator className="bg-white/5" />
+              <Separator className="bg-white/5" />
 
-            <Button
-              className="w-full bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white shadow-lg shadow-emerald-500/10"
-              disabled={!hasFees || claiming}
-              onClick={handleClaimFees}
-            >
-              {claiming
-                ? "Claiming Fees..."
-                : claimSuccess
-                ? "✓ Fees Claimed!"
-                : "Claim All Fees"}
-            </Button>
-            {claimError && (
-              <p className="text-xs text-rose-400 mt-1">{claimError}</p>
-            )}
+              <Button
+                className="w-full bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white shadow-lg shadow-emerald-500/10"
+                disabled={!hasFees || claiming}
+                onClick={handleClaimFees}
+              >
+                {claiming
+                  ? "Claiming Fees..."
+                  : claimSuccess
+                  ? "✓ Fees Claimed!"
+                  : "Claim All Fees"}
+              </Button>
+              {claimError && (
+                <p className="text-xs text-rose-400 mt-1">{claimError}</p>
+              )}
 
-            <Separator className="bg-white/5" />
+              <Separator className="bg-white/5" />
 
-            <Button
-              variant="outline"
-              className="w-full border-rose-500/20 text-rose-400 hover:bg-rose-500/10"
-              onClick={handleWithdrawAll}
-              disabled={withdrawing || withdrawSuccess}
-            >
-              {withdrawing
-                ? "Signing Transaction..."
-                : withdrawSuccess
-                ? "✓ Position Closed — Redirecting..."
-                : "Withdraw All Liquidity"}
-            </Button>
-            {withdrawError && (
-              <p className="text-xs text-rose-400 mt-1">{withdrawError}</p>
-            )}
-          </div>
-          <p className="text-[10px] text-muted-foreground mt-3">
-            Actions execute on-chain transactions. You'll be asked to sign
-            with your wallet.
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Position Activity */}
-      <PositionActivityCard positionId={positionId} />
+              <Button
+                variant="outline"
+                className="w-full border-rose-500/20 text-rose-400 hover:bg-rose-500/10"
+                onClick={handleWithdrawAll}
+                disabled={withdrawing || withdrawSuccess}
+              >
+                {withdrawing
+                  ? "Signing Transaction..."
+                  : withdrawSuccess
+                  ? "✓ Position Closed — Redirecting..."
+                  : "Withdraw All Liquidity"}
+              </Button>
+              {withdrawError && (
+                <p className="text-xs text-rose-400 mt-1">{withdrawError}</p>
+              )}
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-3">
+              Actions execute on-chain transactions. You'll be asked to sign
+              with your wallet.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Monitoring Logs */}
       <AutoCloseLogs positionId={positionId} />
